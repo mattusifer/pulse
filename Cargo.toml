@@ -1,0 +1,17 @@
+[package]
+name = "pulse"
+version = "0.1.0"
+authors = ["Matt Usifer <mattusifer@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix = "^0.7"
+clap = "^2.32"
+failure = "^0.1"
+futures = "^0.1"
+lettre-openssl111 = "^0.9"
+lettre-openssl111_email = "^0.9"
+mime = "^0.3"
+serde = { version = "^1.0", features = ["derive"] }
+systemstat = "^0.1"
+toml = "^0.4"
