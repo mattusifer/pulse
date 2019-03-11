@@ -12,6 +12,11 @@ pub struct Broadcast {
     config: BroadcastConfig,
 }
 
+#[derive(Debug)]
+pub enum BroadcastMessage {
+    Email { subject: String, body: String },
+}
+
 impl Broadcast {
     pub fn new() -> Result<Self> {
         Ok(Self {
@@ -19,7 +24,13 @@ impl Broadcast {
         })
     }
 
-    pub fn email<S: Into<String>, T: Into<String>>(&self, subject: S, body: T) -> Result<()> {
+    pub fn broadcast(&self, message: BroadcastMessage) -> Result<()> {
+        match message {
+            BroadcastMessage::Email { subject, body } => self.email(subject, body),
+        }
+    }
+
+    fn email<S: Into<String>, T: Into<String>>(&self, subject: S, body: T) -> Result<()> {
         let mut email = Email::builder();
         for recipient in &self.config.email.recipients {
             email = email.to(recipient.clone())

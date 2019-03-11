@@ -1,9 +1,11 @@
 use actix::prelude::*;
+use chrono::Duration;
 use systemstat::{Platform, System};
 
 use super::{messages::ScheduleMessage, Service, ServiceId};
+
 use crate::{
-    broadcast::Broadcast,
+    broadcast::{Broadcast, BroadcastMessage},
     config::{Config, FilesystemConfig, SystemMonitorConfig},
     error::{Error, Result},
 };
@@ -54,16 +56,26 @@ impl Handler<ScheduleMessage> for SystemMonitor {
                         .and_then(|path| self.system.mount_at(path).map_err(Into::into))
                         .and_then(|filesystem| {
                             let disk_usage = (filesystem.avail.as_usize() as f32
-                                / filesystem.total.as_usize() as f32) * 100 as f32;
+                                / filesystem.total.as_usize() as f32)
+                                * 100 as f32;
+                            let identifier =
+                                serde_json::to_string(&ScheduleMessage::CheckDiskUsage)?;
+
                             if disk_usage > filesystem_config.available_space_alert_above {
-                                self.broadcast.email(
-                                    "Filesystem Alert",
-                                    format!(
-                                    "Filesystem mounted at {} has {:.2}% disk usage, which is above the max of {:.2}",
-                                    filesystem.fs_mounted_on,
-                                    disk_usage,
-                                    filesystem_config.available_space_alert_above
-                                ),
+                                broadcast!(
+                                    Duration::minutes(1),
+                                    identifier,
+                                    vec![BroadcastMessage::Email {
+                                        subject: "Filesystem Alert".into(),
+                                        body: format!(
+                                            "Filesystem mounted at {} has {:.2}% disk usage, \
+                                             which is above the max of {:.2}",
+                                            filesystem.fs_mounted_on,
+                                            disk_usage,
+                                            filesystem_config.available_space_alert_above
+                                        )
+                                    }],
+                                    |msg| self.broadcast.broadcast(msg)
                                 )
                             } else {
                                 Ok(())

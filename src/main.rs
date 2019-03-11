@@ -1,5 +1,7 @@
 mod broadcast;
 mod config;
+#[macro_use]
+mod db;
 mod error;
 mod services;
 

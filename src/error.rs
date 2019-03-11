@@ -44,6 +44,18 @@ pub enum ErrorKind {
     #[fail(display = "error sending email: {}", error)]
     EmailError { error: String },
 
+    #[fail(display = "bincode error: {}", error)]
+    BincodeError { error: String },
+
+    #[fail(display = "chrono error: {}", error)]
+    ChronoError { error: String },
+
+    #[fail(display = "sled error: {}", error)]
+    SledError { error: String },
+
+    #[fail(display = "serde error: {}", error)]
+    SerdeError { error: String },
+
     #[fail(display = "error parsing toml: {}", error)]
     TomlError { error: String },
 
@@ -80,11 +92,47 @@ impl From<toml::de::Error> for Error {
     }
 }
 
-/// map from hyper errors
+/// map from email errors
 impl From<lettre::smtp::error::Error> for Error {
     fn from(error: lettre::smtp::error::Error) -> Error {
         Error::from(Context::new(ErrorKind::EmailError {
             error: error.to_string(),
+        }))
+    }
+}
+
+/// map from sled errors
+impl<T: fmt::Debug> From<pagecache::Error<T>> for Error {
+    fn from(error: pagecache::Error<T>) -> Error {
+        Error::from(Context::new(ErrorKind::SledError {
+            error: format!("{}", error),
+        }))
+    }
+}
+
+/// map from serde errors
+impl From<serde_json::Error> for Error {
+    fn from(error: serde_json::Error) -> Error {
+        Error::from(Context::new(ErrorKind::SerdeError {
+            error: format!("{}", error),
+        }))
+    }
+}
+
+/// map from bincode errors
+impl From<bincode::Error> for Error {
+    fn from(error: bincode::Error) -> Error {
+        Error::from(Context::new(ErrorKind::BincodeError {
+            error: format!("{}", error),
+        }))
+    }
+}
+
+/// map from chrono errors
+impl From<chrono::format::ParseError> for Error {
+    fn from(error: chrono::format::ParseError) -> Error {
+        Error::from(Context::new(ErrorKind::ChronoError {
+            error: format!("{}", error),
         }))
     }
 }
