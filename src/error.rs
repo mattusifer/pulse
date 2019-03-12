@@ -18,6 +18,13 @@ impl Error {
     pub fn invalid_unicode_path(path: PathBuf) -> Self {
         ErrorKind::InvalidUnicodePath { path }.into()
     }
+
+    pub fn bincode_error<S: Into<String>>(message: S) -> Self {
+        ErrorKind::BincodeError {
+            error: message.into(),
+        }
+        .into()
+    }
 }
 
 impl Fail for Error {
@@ -59,6 +66,9 @@ pub enum ErrorKind {
     #[fail(display = "error parsing toml: {}", error)]
     TomlError { error: String },
 
+    #[fail(display = "actix send error: {}", error)]
+    ActixSendError { error: String },
+
     #[fail(display = "io error: {}", error)]
     IoError { error: String },
 }
@@ -87,6 +97,15 @@ impl From<io::Error> for Error {
 impl From<toml::de::Error> for Error {
     fn from(error: toml::de::Error) -> Error {
         Error::from(Context::new(ErrorKind::TomlError {
+            error: error.to_string(),
+        }))
+    }
+}
+
+/// map from actix errors
+impl<T> From<actix::prelude::SendError<T>> for Error {
+    fn from(error: actix::prelude::SendError<T>) -> Error {
+        Error::from(Context::new(ErrorKind::ActixSendError {
             error: error.to_string(),
         }))
     }

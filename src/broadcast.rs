@@ -26,11 +26,17 @@ impl Broadcast {
 
     pub fn broadcast(&self, message: BroadcastMessage) -> Result<()> {
         match message {
-            BroadcastMessage::Email { subject, body } => self.email(subject, body),
+            BroadcastMessage::Email { subject, body } => {
+                self.email(subject, body)
+            }
         }
     }
 
-    fn email<S: Into<String>, T: Into<String>>(&self, subject: S, body: T) -> Result<()> {
+    fn email<S: Into<String>, T: Into<String>>(
+        &self,
+        subject: S,
+        body: T,
+    ) -> Result<()> {
         let mut email = Email::builder();
         for recipient in &self.config.email.recipients {
             email = email.to(recipient.clone())

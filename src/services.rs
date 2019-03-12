@@ -1,11 +1,10 @@
 pub mod messages;
 pub mod system;
 
-use actix::prelude::*;
-
 use self::messages::ScheduleMessage;
 use crate::config::{Config, ScheduleConfig};
-use crate::error::Result;
+use crate::error::{Error, Result};
+use actix::prelude::*;
 
 #[derive(Eq, PartialEq, Hash)]
 pub struct ServiceId(String);
@@ -54,9 +53,9 @@ impl Actor for Scheduler {
                 let service = service.clone();
                 ctx.run_interval(schedule.interval, move |_, _| {
                     let schedule = schedule.clone();
-                    service
-                        .do_send(schedule.message)
-                        .unwrap_or_else(|e| eprintln!("send error: {}", e))
+                    service.do_send(schedule.message).unwrap_or_else(|e| {
+                        eprintln!("{}", Into::<Error>::into(e))
+                    })
                 });
             }
         }
