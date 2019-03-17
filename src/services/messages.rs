@@ -13,7 +13,7 @@ impl Message for ScheduleMessage {
     type Result = Result<()>;
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum BroadcastEventType {
     HighDiskUsage,

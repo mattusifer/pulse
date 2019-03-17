@@ -91,6 +91,12 @@ impl Actor for Broadcast {
                                 })
                                 .unwrap_or(true) =>
                         {
+                            let prefix = if last_alerted.is_none() {
+                                "[PULSE]"
+                            } else {
+                                "[PULSE] Retriggered:"
+                            };
+
                             let (subject, body) = message.subject_and_body();
                             for medium in &alert_config.mediums {
                                 match medium {
@@ -100,12 +106,11 @@ impl Actor for Broadcast {
                                             .unwrap()
                                             .emailer {
                                                 emailer.email(
-                                                subject.clone(),
+                                                    format!("{} {}", prefix, subject.clone()),
                                                     body.clone(),
                                                 )
                                                     .map_err(|_| ())
                                                     .unwrap();
-
                                             } else {
                                                 error!("Email was not configured");
                                             }

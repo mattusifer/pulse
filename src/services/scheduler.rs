@@ -55,10 +55,7 @@ mod test {
         thread, time,
     };
 
-    use crate::{
-        config::{self, Config},
-        error::Result,
-    };
+    use crate::{config::Config, error::Result};
 
     struct TestActor {
         pub messages_recieved: Arc<Mutex<Vec<ScheduleMessage>>>,

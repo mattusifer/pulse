@@ -93,7 +93,10 @@ impl Handler<ScheduleMessage> for SystemMonitor {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::config::{Config, FilesystemConfig};
+    use crate::{
+        config::{Config, FilesystemConfig},
+        services::messages::BroadcastEventType,
+    };
     use std::{thread, time::Duration};
 
     #[test]
@@ -118,7 +121,11 @@ mod test {
             thread::spawn(move || {
                 thread::sleep(Duration::from_millis(200));
 
-                assert_eq!(OUTBOX.len(), 1);
+                let outgoing_message = OUTBOX.pop().unwrap();
+                assert_eq!(
+                    outgoing_message.event_type(),
+                    BroadcastEventType::HighDiskUsage
+                );
 
                 current.stop()
             });
