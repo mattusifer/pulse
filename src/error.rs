@@ -19,11 +19,8 @@ impl Error {
         ErrorKind::InvalidUnicodePath { path }.into()
     }
 
-    pub fn bincode_error<S: Into<String>>(message: S) -> Self {
-        ErrorKind::BincodeError {
-            error: message.into(),
-        }
-        .into()
+    pub fn unconfigured_email() -> Self {
+        ErrorKind::UnconfiguredEmail.into()
     }
 }
 
@@ -48,14 +45,20 @@ pub enum ErrorKind {
     #[fail(display = "invalid unicode path: {:?}", path)]
     InvalidUnicodePath { path: PathBuf },
 
+    #[fail(display = "email is not configured")]
+    UnconfiguredEmail,
+
     #[fail(display = "error sending email: {}", error)]
     EmailError { error: String },
 
-    #[fail(display = "bincode error: {}", error)]
-    BincodeError { error: String },
+    #[fail(display = "no user home directory found")]
+    NoHomeDirectory,
 
     #[fail(display = "chrono error: {}", error)]
     ChronoError { error: String },
+
+    #[fail(display = "crossbeam error: {}", error)]
+    CrossbeamError { error: String },
 
     #[fail(display = "sled error: {}", error)]
     SledError { error: String },
@@ -111,6 +114,15 @@ impl<T> From<actix::prelude::SendError<T>> for Error {
     }
 }
 
+/// map from crossbeam errors
+impl<T> From<crossbeam::queue::PushError<T>> for Error {
+    fn from(error: crossbeam::queue::PushError<T>) -> Error {
+        Error::from(Context::new(ErrorKind::CrossbeamError {
+            error: error.to_string(),
+        }))
+    }
+}
+
 /// map from email errors
 impl From<lettre::smtp::error::Error> for Error {
     fn from(error: lettre::smtp::error::Error) -> Error {
@@ -133,15 +145,6 @@ impl<T: fmt::Debug> From<pagecache::Error<T>> for Error {
 impl From<serde_json::Error> for Error {
     fn from(error: serde_json::Error) -> Error {
         Error::from(Context::new(ErrorKind::SerdeError {
-            error: format!("{}", error),
-        }))
-    }
-}
-
-/// map from bincode errors
-impl From<bincode::Error> for Error {
-    fn from(error: bincode::Error) -> Error {
-        Error::from(Context::new(ErrorKind::BincodeError {
             error: format!("{}", error),
         }))
     }
