@@ -89,3 +89,41 @@ impl Handler<ScheduleMessage> for SystemMonitor {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::config::{Config, FilesystemConfig};
+    use std::{thread, time::Duration};
+
+    #[test]
+    fn system_monitor_checks_disk_usage() {
+        let mut config = Config::default();
+        config.system_monitor = Some(SystemMonitorConfig {
+            filesystems: vec![FilesystemConfig {
+                mount: "/".into(),
+                available_space_alert_above: 0.0,
+            }],
+        });
+
+        let system = System::new("test");
+
+        run_with_config!(config, {
+            let addr = SystemMonitor::new().start();
+            let recipient = Addr::recipient(addr);
+
+            recipient.do_send(ScheduleMessage::CheckDiskUsage).unwrap();
+
+            let current = System::current();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(200));
+
+                assert_eq!(OUTBOX.len(), 1);
+
+                current.stop()
+            });
+
+            system.run();
+        });
+    }
+}
