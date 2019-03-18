@@ -117,14 +117,14 @@ pub mod test {
     // config during execution
     #[macro_export]
     macro_rules! run_with_config {
-        ($config:expr, $test_block:expr) => {
+        ($config:expr, $test_block:expr) => {{
             use crate::config::{self, test};
 
             let _lock = test::lock_config();
             config::initialize_from($config);
 
             $test_block
-        };
+        }};
     }
 
     lazy_static! {
