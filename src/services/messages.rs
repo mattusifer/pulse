@@ -19,7 +19,7 @@ pub enum BroadcastEventType {
     HighDiskUsage,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum BroadcastEvent {
     HighDiskUsage {
         filesystem_mount: String,

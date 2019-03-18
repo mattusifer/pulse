@@ -204,4 +204,57 @@ mod test {
             system.run();
         });
     }
+
+    #[test]
+    fn broadcast_ignores_alerts_if_an_alert_was_just_sent() {
+        let mut config = Config::default();
+        config.broadcast.alerts.push(AlertConfig {
+            alert_interval: Duration::from_millis(100),
+            event: BroadcastEventType::HighDiskUsage,
+            mediums: vec![BroadcastMedium::Email],
+        });
+
+        let system = System::new("test");
+
+        let emailer = TestEmailer::new();
+
+        let sent_emails =
+            &emailer.downcast_ref::<TestEmailer>().unwrap().sent_emails;
+        let sent_emails = Arc::clone(sent_emails);
+
+        run_with_config!(config, {
+            Broadcast::new().with_emailer(emailer).start();
+
+            let event = BroadcastEvent::HighDiskUsage {
+                filesystem_mount: "/".to_string(),
+                current_usage: 100.00,
+                max_usage: 50.00,
+            };
+
+            // push 10 events in a row, only one of these should get
+            // alerted on.
+            for _ in 1..10 {
+                OUTBOX.push(event.clone()).unwrap();
+            }
+
+            let current = System::current();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(
+                    50 + BROADCAST_TICK_INTERVAL,
+                ));
+
+                // push another one, this one should get alerted on
+                // now that we're past the alert interval
+                OUTBOX.push(event.clone()).unwrap();
+
+                thread::sleep(Duration::from_millis(BROADCAST_TICK_INTERVAL));
+
+                assert_eq!(sent_emails.lock().unwrap().len(), 2);
+
+                current.stop()
+            });
+
+            system.run();
+        });
+    }
 }
