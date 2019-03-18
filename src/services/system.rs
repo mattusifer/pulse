@@ -116,21 +116,21 @@ mod test {
             let recipient = Addr::recipient(addr);
 
             recipient.do_send(ScheduleMessage::CheckDiskUsage).unwrap();
-
-            let current = System::current();
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(200));
-
-                let outgoing_message = OUTBOX.pop().unwrap();
-                assert_eq!(
-                    outgoing_message.event_type(),
-                    BroadcastEventType::HighDiskUsage
-                );
-
-                current.stop()
-            });
-
-            system.run();
         });
+
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(200));
+
+            let outgoing_message = OUTBOX.pop().unwrap();
+            assert_eq!(
+                outgoing_message.event_type(),
+                BroadcastEventType::HighDiskUsage
+            );
+
+            current.stop()
+        });
+
+        system.run();
     }
 }

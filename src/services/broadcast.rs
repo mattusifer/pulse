@@ -181,28 +181,26 @@ mod test {
 
         run_with_config!(config, {
             Broadcast::new().with_emailer(emailer).start();
-
-            let event = BroadcastEvent::HighDiskUsage {
-                filesystem_mount: "/".to_string(),
-                current_usage: 100.00,
-                max_usage: 50.00,
-            };
-
-            OUTBOX.push(event).unwrap();
-
-            let current = System::current();
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(
-                    50 + BROADCAST_TICK_INTERVAL,
-                ));
-
-                assert_eq!(sent_emails.lock().unwrap().len(), 1);
-
-                current.stop()
-            });
-
-            system.run();
         });
+
+        let event = BroadcastEvent::HighDiskUsage {
+            filesystem_mount: "/".to_string(),
+            current_usage: 100.00,
+            max_usage: 50.00,
+        };
+
+        OUTBOX.push(event).unwrap();
+
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50 + BROADCAST_TICK_INTERVAL));
+
+            assert_eq!(sent_emails.lock().unwrap().len(), 1);
+
+            current.stop()
+        });
+
+        system.run();
     }
 
     #[test]
@@ -224,37 +222,35 @@ mod test {
 
         run_with_config!(config, {
             Broadcast::new().with_emailer(emailer).start();
-
-            let event = BroadcastEvent::HighDiskUsage {
-                filesystem_mount: "/".to_string(),
-                current_usage: 100.00,
-                max_usage: 50.00,
-            };
-
-            // push 10 events in a row, only one of these should get
-            // alerted on.
-            for _ in 1..10 {
-                OUTBOX.push(event.clone()).unwrap();
-            }
-
-            let current = System::current();
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(
-                    50 + BROADCAST_TICK_INTERVAL,
-                ));
-
-                // push another one, this one should get alerted on
-                // now that we're past the alert interval
-                OUTBOX.push(event.clone()).unwrap();
-
-                thread::sleep(Duration::from_millis(BROADCAST_TICK_INTERVAL));
-
-                assert_eq!(sent_emails.lock().unwrap().len(), 2);
-
-                current.stop()
-            });
-
-            system.run();
         });
+
+        let event = BroadcastEvent::HighDiskUsage {
+            filesystem_mount: "/".to_string(),
+            current_usage: 100.00,
+            max_usage: 50.00,
+        };
+
+        // push 10 events in a row, only one of these should get
+        // alerted on.
+        for _ in 1..10 {
+            OUTBOX.push(event.clone()).unwrap();
+        }
+
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50 + BROADCAST_TICK_INTERVAL));
+
+            // push another one, this one should get alerted on
+            // now that we're past the alert interval
+            OUTBOX.push(event.clone()).unwrap();
+
+            thread::sleep(Duration::from_millis(BROADCAST_TICK_INTERVAL));
+
+            assert_eq!(sent_emails.lock().unwrap().len(), 2);
+
+            current.stop()
+        });
+
+        system.run();
     }
 }

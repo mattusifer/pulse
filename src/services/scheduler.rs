@@ -100,23 +100,23 @@ mod test {
             let mut scheduler = Scheduler::new();
             scheduler.add_service(recipient);
             scheduler.start();
-
-            let current = System::current();
-            thread::spawn(move || {
-                thread::sleep(time::Duration::from_millis(300));
-
-                let messages = messages_received.lock().unwrap().clone();
-
-                assert!(messages.len() > 2);
-                assert!(messages
-                    .into_iter()
-                    .all(|msg| msg == ScheduleMessage::CheckDiskUsage));
-
-                current.stop();
-            });
-
-            system.run();
         });
+
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(time::Duration::from_millis(300));
+
+            let messages = messages_received.lock().unwrap().clone();
+
+            assert!(messages.len() > 2);
+            assert!(messages
+                .into_iter()
+                .all(|msg| msg == ScheduleMessage::CheckDiskUsage));
+
+            current.stop();
+        });
+
+        system.run();
     }
 
     #[test]
@@ -138,17 +138,16 @@ mod test {
         .start();
 
         run_with_config!(test_config, {
-            let scheduler = Scheduler::new();
-            scheduler.start();
-
-            let current = System::current();
-            thread::spawn(move || {
-                thread::sleep(time::Duration::from_millis(60));
-                assert!(messages_received.lock().unwrap().is_empty());
-                current.stop();
-            });
-
-            system.run();
+            Scheduler::new().start();
         });
+
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(time::Duration::from_millis(60));
+            assert!(messages_received.lock().unwrap().is_empty());
+            current.stop();
+        });
+
+        system.run();
     }
 }
