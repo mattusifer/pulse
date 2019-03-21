@@ -1,20 +1,27 @@
+use std::str::FromStr;
+use std::time::Duration;
+
 use actix::prelude::*;
+use chrono::Local;
+use cron::Schedule as CronSchedule;
 
 use super::messages::ScheduleMessage;
-use crate::config::{config, ScheduleConfig};
+use crate::config::{config, SchedulerConfig};
 use crate::error::Error;
 
 /// The scheduler is responsible for kicking off configured tasks at
 /// the correct times by sending messages to other services that
 /// actually perform those tasks
 pub struct Scheduler {
-    config: Vec<ScheduleConfig>,
+    config: SchedulerConfig,
     services: Vec<Recipient<ScheduleMessage>>,
 }
 impl Scheduler {
+    const DEFAULT_TICK: u32 = 5000;
+
     pub fn new() -> Self {
         Self {
-            config: config().schedules,
+            config: config().scheduler,
             services: vec![],
         }
     }
@@ -32,15 +39,36 @@ impl Actor for Scheduler {
     /// context to send the correct messages to the configured
     /// services on the configured schedule
     fn started(&mut self, ctx: &mut Context<Self>) {
-        for schedule in &self.config {
+        let tick = self.config.tick_ms.unwrap_or(Self::DEFAULT_TICK);
+        let chrono_tick = chrono::Duration::milliseconds(tick.into());
+        let std_tick = Duration::from_millis(tick.into());
+
+        for schedule in &self.config.schedules {
             for service in &self.services {
                 let schedule = schedule.clone();
                 let service = service.clone();
-                ctx.run_interval(schedule.schedule_interval, move |_, _| {
-                    let schedule = schedule.clone();
-                    service.do_send(schedule.message).unwrap_or_else(|e| {
-                        eprintln!("{}", Into::<Error>::into(e))
-                    })
+
+                // TODO: validate the schedule string before it gets here
+                let cron_schedule = schedule
+                    .cron
+                    .clone()
+                    .and_then(|c| CronSchedule::from_str(&c).ok());
+
+                ctx.run_interval(std_tick, move |_, _| {
+                    if let Some(ref cron_schedule) = cron_schedule {
+                        let next_date =
+                            cron_schedule.upcoming(Local).next().unwrap();
+                        let one_tick_before = next_date - chrono_tick;
+                        let now = Local::now();
+
+                        if !(one_tick_before <= now && now <= next_date) {
+                            return;
+                        }
+                    }
+
+                    service.do_send(schedule.clone().message).unwrap_or_else(
+                        |e| eprintln!("{}", Into::<Error>::into(e)),
+                    )
                 });
             }
         }
@@ -55,7 +83,10 @@ mod test {
         thread, time,
     };
 
-    use crate::{config::Config, error::Result};
+    use crate::{
+        config::{Config, ScheduleConfig},
+        error::Result,
+    };
 
     struct TestActor {
         pub messages_recieved: Arc<Mutex<Vec<ScheduleMessage>>>,
@@ -78,10 +109,54 @@ mod test {
     }
 
     #[test]
+    fn scheduler_sends_messages_to_configured_service_on_cron_schedule() {
+        let mut test_config = Config::default();
+        test_config.scheduler.tick_ms = Some(1000);
+        test_config.scheduler.schedules.push(ScheduleConfig {
+            cron: Some("* * * * * * *".to_string()),
+            message: ScheduleMessage::CheckDiskUsage,
+        });
+
+        let system = System::new("test");
+
+        let messages_received: Arc<Mutex<Vec<ScheduleMessage>>> =
+            Arc::new(Mutex::new(vec![]));
+
+        let test_actor = TestActor {
+            messages_recieved: Arc::clone(&messages_received),
+        };
+        let addr = test_actor.start();
+        let recipient = Addr::recipient(addr);
+
+        run_with_config!(test_config, {
+            let mut scheduler = Scheduler::new();
+            scheduler.add_service(recipient);
+            scheduler.start();
+        });
+
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(time::Duration::from_millis(3000));
+
+            let messages = messages_received.lock().unwrap().clone();
+
+            assert!(messages.len() == 2);
+            assert!(messages
+                .into_iter()
+                .all(|msg| msg == ScheduleMessage::CheckDiskUsage));
+
+            current.stop();
+        });
+
+        system.run();
+    }
+
+    #[test]
     fn scheduler_sends_messages_to_configured_service() {
         let mut test_config = Config::default();
-        test_config.schedules.push(ScheduleConfig {
-            schedule_interval: time::Duration::from_millis(25),
+        test_config.scheduler.tick_ms = Some(25);
+        test_config.scheduler.schedules.push(ScheduleConfig {
+            cron: None,
             message: ScheduleMessage::CheckDiskUsage,
         });
 
@@ -122,8 +197,9 @@ mod test {
     #[test]
     fn scheduler_doesnt_send_to_unconfigured_service() {
         let mut test_config = Config::default();
-        test_config.schedules.push(ScheduleConfig {
-            schedule_interval: time::Duration::from_millis(25),
+        test_config.scheduler.tick_ms = Some(25);
+        test_config.scheduler.schedules.push(ScheduleConfig {
+            cron: None,
             message: ScheduleMessage::CheckDiskUsage,
         });
 

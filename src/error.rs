@@ -69,6 +69,9 @@ pub enum ErrorKind {
     #[fail(display = "error parsing toml: {}", error)]
     TomlError { error: String },
 
+    #[fail(display = "error parsing cron expression: {}", error)]
+    CronError { error: String },
+
     #[fail(display = "actix send error: {}", error)]
     ActixSendError { error: String },
 
@@ -100,6 +103,15 @@ impl From<io::Error> for Error {
 impl From<toml::de::Error> for Error {
     fn from(error: toml::de::Error) -> Error {
         Error::from(Context::new(ErrorKind::TomlError {
+            error: error.to_string(),
+        }))
+    }
+}
+
+/// map from toml errors
+impl From<cron::error::Error> for Error {
+    fn from(error: cron::error::Error) -> Error {
+        Error::from(Context::new(ErrorKind::CronError {
             error: error.to_string(),
         }))
     }

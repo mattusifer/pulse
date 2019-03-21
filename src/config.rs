@@ -74,8 +74,19 @@ pub struct SystemMonitorConfig {
 }
 
 #[derive(Clone, Deserialize, Debug)]
+pub struct NewsConfig {
+    pub filesystems: Vec<FilesystemConfig>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct SchedulerConfig {
+    pub schedules: Vec<ScheduleConfig>,
+    pub tick_ms: Option<u32>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
 pub struct ScheduleConfig {
-    pub schedule_interval: Duration,
+    pub cron: Option<String>,
     pub message: ScheduleMessage,
 }
 
@@ -89,7 +100,7 @@ pub struct AlertConfig {
 #[derive(Clone, Deserialize, Debug)]
 pub struct Config {
     pub system_monitor: Option<SystemMonitorConfig>,
-    pub schedules: Vec<ScheduleConfig>,
+    pub scheduler: SchedulerConfig,
     pub broadcast: BroadcastConfig,
 }
 
@@ -97,7 +108,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             system_monitor: None,
-            schedules: vec![],
+            scheduler: SchedulerConfig {
+                schedules: vec![],
+                tick_ms: None,
+            },
             broadcast: BroadcastConfig {
                 email: None,
                 alerts: vec![],

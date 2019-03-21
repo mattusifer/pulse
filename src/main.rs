@@ -19,7 +19,7 @@ fn main() -> Result<()> {
 
     let system = System::new("pulse");
 
-    let _broadcast = Broadcast::new().start();
+    Broadcast::new().start();
 
     let monitor_addr = SystemMonitor::new().start();
 
