@@ -10,8 +10,9 @@ use actix::prelude::*;
 use crossbeam::queue::ArrayQueue;
 use lazy_static::lazy_static;
 use log::error;
+use log::{debug, info};
 
-use crate::config::{config, AlertConfig};
+use crate::config::{config, AlertConfig, AlertType};
 use crate::services::broadcast::email::{Emailer, SendEmail};
 use crate::services::messages::{BroadcastEvent, BroadcastMedium};
 
@@ -73,6 +74,8 @@ impl Actor for Broadcast {
             Duration::from_millis(BROADCAST_TICK_INTERVAL),
             move |_, _| {
                 while let Ok(message) = OUTBOX.pop() {
+                    debug!("Broadcast received message: {:?}", message.event_type());
+
                     let message_string =
                         serde_json::to_string(&message.event_type()).unwrap();
 
@@ -81,17 +84,17 @@ impl Actor for Broadcast {
                     // get the configuration for this message, if it exists
                     match alerts_map.get(&message_string) {
                         Some((alert_config, last_alerted))
-
                             // only need to alert if we haven't already
                             // alerted within the configured window
-                            if last_alerted
+                            if alert_config.alert_interval.is_none() || last_alerted
                                 .map(|last_alerted| {
                                     Instant::now().duration_since(last_alerted)
-                                        > alert_config.alert_interval
+                                        > alert_config.alert_interval.unwrap()
                                 })
                                 .unwrap_or(true) =>
                         {
-                            let prefix = if last_alerted.is_none() {
+                            info!("Sending alert for : {:?}", message);
+                            let prefix = if last_alerted.is_none() || alert_config.alert_type == AlertType::Digest {
                                 "[PULSE]"
                             } else {
                                 "[PULSE] Retriggered:"
@@ -122,7 +125,10 @@ impl Actor for Broadcast {
                                 (alert_config.clone(), Some(Instant::now())),
                             );
                         }
-                        _ => (),
+                        _ => {
+                            debug!("Not alerting: {:?}. Alerts map entry: {:?}", message.event_type(), alerts_map.get(&message_string));
+                            ()
+                        },
                     }
                 }
             },
@@ -130,13 +136,41 @@ impl Actor for Broadcast {
     }
 }
 
+#[macro_use]
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
     use crate::{
-        config::Config, error::Result, services::messages::BroadcastEventType,
+        config::{AlertType, Config},
+        error::Result,
+        services::messages::BroadcastEventType,
     };
-    use std::{sync::Mutex, thread};
+    use std::{
+        result,
+        sync::{Mutex, MutexGuard, PoisonError},
+        thread,
+    };
+
+    lazy_static! {
+        static ref LOCK: Mutex<()> = Mutex::new(());
+    }
+
+    pub fn lock_outbox<'a>(
+    ) -> result::Result<MutexGuard<'a, ()>, PoisonError<MutexGuard<'a, ()>>>
+    {
+        LOCK.lock()
+    }
+
+    // run the given block with exclusive access to the OUTBOX
+    #[macro_export]
+    macro_rules! run_with_outbox {
+        ($test_block:expr) => {{
+            use crate::services::broadcast::test;
+            let _lock = test::lock_outbox();
+
+            $test_block
+        }};
+    }
 
     thread_local! {
         static SENT_EMAILS: Vec<(String, String)> = vec![];
@@ -166,9 +200,10 @@ mod test {
     fn broadcast_sends_emails() {
         let mut config = Config::default();
         config.broadcast.alerts.push(AlertConfig {
-            alert_interval: Duration::from_millis(100),
+            alert_interval: Some(Duration::from_millis(100)),
             event: BroadcastEventType::HighDiskUsage,
             mediums: vec![BroadcastMedium::Email],
+            alert_type: AlertType::Alarm,
         });
 
         let system = System::new("test");
@@ -189,15 +224,19 @@ mod test {
             max_usage: 50.00,
         };
 
-        OUTBOX.push(event).unwrap();
+        run_with_outbox!({
+            OUTBOX.push(event).unwrap();
 
-        let current = System::current();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50 + BROADCAST_TICK_INTERVAL));
+            let current = System::current();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(
+                    50 + BROADCAST_TICK_INTERVAL,
+                ));
 
-            assert_eq!(sent_emails.lock().unwrap().len(), 1);
+                assert_eq!(sent_emails.lock().unwrap().len(), 1);
 
-            current.stop()
+                current.stop()
+            });
         });
 
         system.run();
@@ -207,9 +246,10 @@ mod test {
     fn broadcast_ignores_alerts_if_an_alert_was_just_sent() {
         let mut config = Config::default();
         config.broadcast.alerts.push(AlertConfig {
-            alert_interval: Duration::from_millis(100),
+            alert_interval: Some(Duration::from_millis(100)),
             event: BroadcastEventType::HighDiskUsage,
             mediums: vec![BroadcastMedium::Email],
+            alert_type: AlertType::Alarm,
         });
 
         let system = System::new("test");
@@ -230,25 +270,29 @@ mod test {
             max_usage: 50.00,
         };
 
-        // push 10 events in a row, only one of these should get
-        // alerted on.
-        for _ in 1..10 {
-            OUTBOX.push(event.clone()).unwrap();
-        }
+        run_with_outbox!({
+            // push 10 events in a row, only one of these should get
+            // alerted on.
+            for _ in 1..10 {
+                OUTBOX.push(event.clone()).unwrap();
+            }
 
-        let current = System::current();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50 + BROADCAST_TICK_INTERVAL));
+            let current = System::current();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(
+                    50 + BROADCAST_TICK_INTERVAL,
+                ));
 
-            // push another one, this one should get alerted on
-            // now that we're past the alert interval
-            OUTBOX.push(event.clone()).unwrap();
+                // push another one, this one should get alerted on
+                // now that we're past the alert interval
+                OUTBOX.push(event.clone()).unwrap();
 
-            thread::sleep(Duration::from_millis(BROADCAST_TICK_INTERVAL));
+                thread::sleep(Duration::from_millis(BROADCAST_TICK_INTERVAL));
 
-            assert_eq!(sent_emails.lock().unwrap().len(), 2);
+                assert_eq!(sent_emails.lock().unwrap().len(), 2);
 
-            current.stop()
+                current.stop()
+            });
         });
 
         system.run();

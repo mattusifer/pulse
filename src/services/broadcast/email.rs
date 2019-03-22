@@ -36,13 +36,11 @@ impl SendEmail for Emailer {
         let email = email
             .from(self.config.username.clone())
             .subject(subject)
-            .text(body)
+            .html(body)
             .build()
             .unwrap();
 
         let mut mailer = SmtpClient::new_simple(&self.config.smtp_host)?
-            // Set the name sent during EHLO/HELO, default is `localhost`
-            .hello_name(ClientId::Domain("my.hostname.tld".to_string()))
             // Add credentials for authentication
             .credentials(Credentials::new(
                 self.config.username.clone(),

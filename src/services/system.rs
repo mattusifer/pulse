@@ -111,24 +111,26 @@ mod test {
 
         let system = System::new("test");
 
-        run_with_config!(config, {
+        let recipient = run_with_config!(config, {
             let addr = SystemMonitor::new().start();
-            let recipient = Addr::recipient(addr);
-
-            recipient.do_send(ScheduleMessage::CheckDiskUsage).unwrap();
+            Addr::recipient(addr)
         });
 
-        let current = System::current();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(200));
+        run_with_outbox!({
+            recipient.do_send(ScheduleMessage::CheckDiskUsage).unwrap();
 
-            let outgoing_message = OUTBOX.pop().unwrap();
-            assert_eq!(
-                outgoing_message.event_type(),
-                BroadcastEventType::HighDiskUsage
-            );
+            let current = System::current();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(200));
 
-            current.stop()
+                let outgoing_message = OUTBOX.pop().unwrap();
+                assert_eq!(
+                    outgoing_message.event_type(),
+                    BroadcastEventType::HighDiskUsage
+                );
+
+                current.stop()
+            });
         });
 
         system.run();

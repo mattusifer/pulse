@@ -17,8 +17,6 @@ pub struct Scheduler {
     services: Vec<Recipient<ScheduleMessage>>,
 }
 impl Scheduler {
-    const DEFAULT_TICK: u32 = 5000;
-
     pub fn new() -> Self {
         Self {
             config: config().scheduler,
@@ -39,7 +37,7 @@ impl Actor for Scheduler {
     /// context to send the correct messages to the configured
     /// services on the configured schedule
     fn started(&mut self, ctx: &mut Context<Self>) {
-        let tick = self.config.tick_ms.unwrap_or(Self::DEFAULT_TICK);
+        let tick = self.config.tick_ms;
         let chrono_tick = chrono::Duration::milliseconds(tick.into());
         let std_tick = Duration::from_millis(tick.into());
 
@@ -111,7 +109,7 @@ mod test {
     #[test]
     fn scheduler_sends_messages_to_configured_service_on_cron_schedule() {
         let mut test_config = Config::default();
-        test_config.scheduler.tick_ms = Some(1000);
+        test_config.scheduler.tick_ms = 1000;
         test_config.scheduler.schedules.push(ScheduleConfig {
             cron: Some("* * * * * * *".to_string()),
             message: ScheduleMessage::CheckDiskUsage,
@@ -154,7 +152,7 @@ mod test {
     #[test]
     fn scheduler_sends_messages_to_configured_service() {
         let mut test_config = Config::default();
-        test_config.scheduler.tick_ms = Some(25);
+        test_config.scheduler.tick_ms = 25;
         test_config.scheduler.schedules.push(ScheduleConfig {
             cron: None,
             message: ScheduleMessage::CheckDiskUsage,
@@ -197,7 +195,7 @@ mod test {
     #[test]
     fn scheduler_doesnt_send_to_unconfigured_service() {
         let mut test_config = Config::default();
-        test_config.scheduler.tick_ms = Some(25);
+        test_config.scheduler.tick_ms = 25;
         test_config.scheduler.schedules.push(ScheduleConfig {
             cron: None,
             message: ScheduleMessage::CheckDiskUsage,

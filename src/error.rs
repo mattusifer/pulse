@@ -69,6 +69,9 @@ pub enum ErrorKind {
     #[fail(display = "error parsing toml: {}", error)]
     TomlError { error: String },
 
+    #[fail(display = "new york times error: {}", error)]
+    NewYorkTimesError { error: String },
+
     #[fail(display = "error parsing cron expression: {}", error)]
     CronError { error: String },
 
@@ -112,6 +115,15 @@ impl From<toml::de::Error> for Error {
 impl From<cron::error::Error> for Error {
     fn from(error: cron::error::Error) -> Error {
         Error::from(Context::new(ErrorKind::CronError {
+            error: error.to_string(),
+        }))
+    }
+}
+
+/// map from toml errors
+impl From<nytrs::error::Error> for Error {
+    fn from(error: nytrs::error::Error) -> Error {
+        Error::from(Context::new(ErrorKind::NewYorkTimesError {
             error: error.to_string(),
         }))
     }

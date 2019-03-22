@@ -1,6 +1,7 @@
 use std::{fs::File, io::Read, path::PathBuf, sync::Mutex, time::Duration};
 
 use lazy_static::lazy_static;
+use nytrs::request::{MostPopularPeriod, ShareType};
 use serde::Deserialize;
 
 use crate::constants;
@@ -74,14 +75,23 @@ pub struct SystemMonitorConfig {
 }
 
 #[derive(Clone, Deserialize, Debug)]
+pub struct NewYorkTimesConfig {
+    pub api_key: String,
+    pub most_popular_viewed_period: Option<MostPopularPeriod>,
+    pub most_popular_emailed_days: Option<MostPopularPeriod>,
+    pub most_popular_shared_period: Option<MostPopularPeriod>,
+    pub most_popular_shared_mediums: Vec<ShareType>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
 pub struct NewsConfig {
-    pub filesystems: Vec<FilesystemConfig>,
+    pub new_york_times: Option<NewYorkTimesConfig>,
 }
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct SchedulerConfig {
     pub schedules: Vec<ScheduleConfig>,
-    pub tick_ms: Option<u32>,
+    pub tick_ms: u32,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -90,16 +100,25 @@ pub struct ScheduleConfig {
     pub message: ScheduleMessage,
 }
 
+#[derive(Clone, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AlertType {
+    Digest,
+    Alarm,
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub struct AlertConfig {
-    pub alert_interval: Duration,
+    pub alert_interval: Option<Duration>,
     pub event: BroadcastEventType,
     pub mediums: Vec<BroadcastMedium>,
+    pub alert_type: AlertType,
 }
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct Config {
     pub system_monitor: Option<SystemMonitorConfig>,
+    pub news: Option<NewsConfig>,
     pub scheduler: SchedulerConfig,
     pub broadcast: BroadcastConfig,
 }
@@ -108,9 +127,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             system_monitor: None,
+            news: None,
             scheduler: SchedulerConfig {
                 schedules: vec![],
-                tick_ms: None,
+                tick_ms: 5000,
             },
             broadcast: BroadcastConfig {
                 email: None,
@@ -126,6 +146,15 @@ pub mod test {
     use lazy_static::lazy_static;
     use std::sync::{Mutex, MutexGuard, PoisonError};
 
+    lazy_static! {
+        static ref LOCK: Mutex<()> = Mutex::new(());
+    }
+
+    pub fn lock_config<'a>(
+    ) -> Result<MutexGuard<'a, ()>, PoisonError<MutexGuard<'a, ()>>> {
+        LOCK.lock()
+    }
+
     // run the given block with the given config initialized into the
     // global config object, ensuring that no other threads modify the
     // config during execution
@@ -139,14 +168,5 @@ pub mod test {
 
             $test_block
         }};
-    }
-
-    lazy_static! {
-        static ref LOCK: Mutex<()> = Mutex::new(());
-    }
-
-    pub fn lock_config<'a>(
-    ) -> Result<MutexGuard<'a, ()>, PoisonError<MutexGuard<'a, ()>>> {
-        LOCK.lock()
     }
 }
