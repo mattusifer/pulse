@@ -51,27 +51,44 @@ impl BroadcastEvent {
                 .to_string(),
             ),
 
-            BroadcastEvent::Newscast { new_york_times } => (
-                "News".to_string(),
-                new_york_times
-                    .iter()
-                    .map(|section| {
-                        format!("<h2>{}</h2>", section.section_title)
-                            + &section
+            BroadcastEvent::Newscast { new_york_times } => {
+                ("News".to_string(), {
+                    let sections = new_york_times
+                        .iter()
+                        .map(|section| {
+                            let articles = section
                                 .articles
                                 .iter()
                                 .map(|article| {
                                     format!(
-                                        r#"<strong>{}</strong> ({})<br><a href="{url}">{url}</a><br>"#,
-                                        article.title, article.published_date, url = article.url
+                                        include_str!(
+                                            "../../resources/email/news/article.html"),
+                                            url = article.url,
+                                            title = article.title,
+                                            publish_date = article.published_date,
+                                            r#abstract = article.r#abstract
                                     )
                                 })
                                 .collect::<Vec<String>>()
-                                .join("<br>")
-                    })
-                    .collect::<Vec<String>>()
-                    .join("<br>"),
-            ),
+                                .join("<br>");
+
+                            format!(
+                                include_str!("../../resources/email/news/section.html"),
+                                section_title = section.section_title, 
+                                articles = articles
+                            )
+                        })
+                        .collect::<Vec<String>>()
+                        .join("<br>");
+
+                    format!(
+                        include_str!("../../resources/email/news/outline.html"),
+                        title = "Digest",
+                        sections = sections,
+                        css = include_str!("../../resources/email/news/style.css")
+                    )
+                })
+            }
         }
     }
 

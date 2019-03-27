@@ -1,0 +1,26 @@
+div#body {
+    font-family: sans-serif;
+    padding: 10px 25px;
+}
+
+#main-title {
+    font-family: monospace;
+    font-size: 50px;
+}
+
+.sections {
+    background: #333;
+    color: #bbb;
+    margin: 0 5px;
+    padding: 10px 40px;
+    font-size: 17px;
+}
+
+.section_title {
+    font-size: 25px;
+}
+
+a.article-title {
+    color: #fff;
+    font-size: 20px;
+}
