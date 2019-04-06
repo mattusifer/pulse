@@ -47,7 +47,9 @@ impl SystemMonitor {
         filesystem_config: &FilesystemConfig,
     ) -> Result<()> {
         self.get_mount(filesystem_config).and_then(|filesystem| {
-            let disk_usage = (filesystem.avail.as_usize() as f32
+            let disk_usage = ((filesystem.total.as_usize()
+                - filesystem.avail.as_usize())
+                as f32
                 / filesystem.total.as_usize() as f32)
                 * 100 as f32;
 
