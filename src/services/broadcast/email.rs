@@ -1,8 +1,5 @@
 use downcast_rs::{impl_downcast, Downcast};
-use lettre::smtp::{
-    authentication::{Credentials, Mechanism},
-    extension::ClientId,
-};
+use lettre::smtp::authentication::{Credentials, Mechanism};
 use lettre::{SmtpClient, Transport};
 use lettre_email::Email;
 

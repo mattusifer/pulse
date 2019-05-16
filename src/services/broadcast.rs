@@ -14,7 +14,9 @@ use log::{debug, info};
 
 use crate::config::{config, AlertConfig, AlertType};
 use crate::services::broadcast::email::{Emailer, SendEmail};
-use crate::services::messages::{BroadcastEvent, BroadcastMedium};
+use crate::services::messages::{
+    BroadcastEvent, BroadcastEventKey, BroadcastEventType, BroadcastMedium,
+};
 
 lazy_static! {
     pub static ref OUTBOX: ArrayQueue<BroadcastEvent> =
@@ -24,7 +26,8 @@ lazy_static! {
 const BROADCAST_TICK_INTERVAL: u64 = 500;
 
 pub struct BroadcastInner {
-    alerts: HashMap<String, (AlertConfig, Option<Instant>)>,
+    alerts: HashMap<BroadcastEventType, AlertConfig>,
+    last_alerted: HashMap<BroadcastEventKey, Instant>,
     emailer: Option<Box<dyn SendEmail>>,
 }
 
@@ -35,13 +38,9 @@ impl BroadcastInner {
             alerts: config
                 .alerts
                 .iter()
-                .map(|alert| {
-                    (
-                        serde_json::to_string(&alert.event).unwrap(),
-                        (alert.clone(), None),
-                    )
-                })
+                .map(|alert| (alert.event.clone(), alert.clone()))
                 .collect(),
+            last_alerted: vec![].into_iter().collect(),
             emailer: config.email.map(Emailer::new),
         }
     }
@@ -76,19 +75,22 @@ impl Actor for Broadcast {
                 while let Ok(message) = OUTBOX.pop() {
                     debug!("Broadcast received message: {:?}", message.event_type());
 
-                    let message_string =
-                        serde_json::to_string(&message.event_type()).unwrap();
-
                     let alerts_map = broadcast.read().unwrap().alerts.clone();
+                    let last_alerted_map = broadcast.read().unwrap().last_alerted.clone();
+
+                    let message_id = message.event_key();
+                    let message_type = message.event_type();
+
+                    let last_alerted = last_alerted_map.get(&message_id);
 
                     // get the configuration for this message, if it exists
-                    match alerts_map.get(&message_string) {
-                        Some((alert_config, last_alerted))
+                    match alerts_map.get(&message_type) {
+                        Some(alert_config)
                             // only need to alert if we haven't already
                             // alerted within the configured window
                             if alert_config.alert_interval.is_none() || last_alerted
-                                .map(|last_alerted| {
-                                    Instant::now().duration_since(last_alerted)
+                                .map(|instant| {
+                                    Instant::now().duration_since(*instant)
                                         > alert_config.alert_interval.unwrap()
                                 })
                                 .unwrap_or(true) =>
@@ -121,12 +123,16 @@ impl Actor for Broadcast {
                                 }
                             }
                             broadcast.write().unwrap().alerts.insert(
-                                message_string,
-                                (alert_config.clone(), Some(Instant::now())),
+                                message_type,
+                                alert_config.clone(),
+                            );
+                            broadcast.write().unwrap().last_alerted.insert(
+                                message_id,
+                                Instant::now()
                             );
                         }
                         _ => {
-                            debug!("Not alerting: {:?}. Alerts map entry: {:?}", message.event_type(), alerts_map.get(&message_string));
+                            debug!("Not alerting: {:?}. Alerts map entry: {:?}", message.event_type(), alerts_map.get(&message_type));
                             ()
                         },
                     }
@@ -172,10 +178,6 @@ pub mod test {
         }};
     }
 
-    thread_local! {
-        static SENT_EMAILS: Vec<(String, String)> = vec![];
-    }
-
     struct TestEmailer {
         sent_emails: Arc<Mutex<Vec<(String, String)>>>,
     }
@@ -197,7 +199,7 @@ pub mod test {
     }
 
     #[test]
-    fn broadcast_sends_emails() {
+    fn broadcast_sends_an_email() {
         let mut config = Config::default();
         config.broadcast.alerts.push(AlertConfig {
             alert_interval: Some(Duration::from_millis(100)),
@@ -237,9 +239,64 @@ pub mod test {
 
                 current.stop()
             });
+
+            system.run();
+        });
+    }
+
+    #[test]
+    fn broadcast_sends_multiple_emails() {
+        let mut config = Config::default();
+        config.broadcast.alerts.push(AlertConfig {
+            alert_interval: Some(Duration::from_millis(100)),
+            event: BroadcastEventType::HighDiskUsage,
+            mediums: vec![BroadcastMedium::Email],
+            alert_type: AlertType::Alarm,
         });
 
-        system.run();
+        let system = System::new("test");
+
+        let emailer = TestEmailer::new();
+
+        let sent_emails =
+            &emailer.downcast_ref::<TestEmailer>().unwrap().sent_emails;
+        let sent_emails = Arc::clone(sent_emails);
+
+        run_with_config!(config, {
+            Broadcast::new().with_emailer(emailer).start();
+        });
+
+        let events = vec![
+            BroadcastEvent::HighDiskUsage {
+                filesystem_mount: "/".to_string(),
+                current_usage: 100.00,
+                max_usage: 50.00,
+            },
+            BroadcastEvent::HighDiskUsage {
+                filesystem_mount: "/mnt/test".to_string(),
+                current_usage: 100.00,
+                max_usage: 50.00,
+            },
+        ];
+
+        run_with_outbox!({
+            for event in events {
+                OUTBOX.push(event).unwrap();
+            }
+
+            let current = System::current();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(
+                    50 + BROADCAST_TICK_INTERVAL,
+                ));
+
+                assert_eq!(sent_emails.lock().unwrap().len(), 2);
+
+                current.stop()
+            });
+
+            system.run();
+        });
     }
 
     #[test]
@@ -293,8 +350,8 @@ pub mod test {
 
                 current.stop()
             });
-        });
 
-        system.run();
+            system.run();
+        });
     }
 }

@@ -15,7 +15,16 @@ impl Message for ScheduleMessage {
     type Result = Result<()>;
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
+pub struct BroadcastEventKey(String);
+
+impl From<String> for BroadcastEventKey {
+    fn from(s: String) -> Self {
+        BroadcastEventKey(s)
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub enum BroadcastEventType {
     HighDiskUsage,
@@ -74,7 +83,7 @@ impl BroadcastEvent {
 
                             format!(
                                 include_str!("../../resources/email/news/section.html"),
-                                section_title = section.section_title, 
+                                section_title = section.section_title,
                                 articles = articles
                             )
                         })
@@ -85,7 +94,9 @@ impl BroadcastEvent {
                         include_str!("../../resources/email/news/outline.html"),
                         title = "Digest",
                         sections = sections,
-                        css = include_str!("../../resources/email/news/style.css")
+                        css = include_str!(
+                            "../../resources/email/news/style.css"
+                        )
                     )
                 })
             }
@@ -98,6 +109,20 @@ impl BroadcastEvent {
                 BroadcastEventType::HighDiskUsage
             }
             BroadcastEvent::Newscast { .. } => BroadcastEventType::Newscast,
+        }
+    }
+
+    /// Unique identifier for this event
+    pub fn event_key(&self) -> BroadcastEventKey {
+        match self {
+            BroadcastEvent::HighDiskUsage {
+                filesystem_mount, ..
+            } => (serde_json::to_string(&self.event_type()).unwrap()
+                + filesystem_mount)
+                .into(),
+            BroadcastEvent::Newscast { .. } => {
+                serde_json::to_string(&self.event_type()).unwrap().into()
+            }
         }
     }
 }
