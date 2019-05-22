@@ -1,4 +1,4 @@
-use std::{fmt, io, path::PathBuf, result};
+use std::{fmt, io, path::PathBuf, result, string};
 
 use failure::{Backtrace, Context, Fail};
 
@@ -80,6 +80,9 @@ pub enum ErrorKind {
 
     #[fail(display = "io error: {}", error)]
     IoError { error: String },
+
+    #[fail(display = "string parsing error: {}", error)]
+    StringParsingError { error: String },
 }
 
 impl From<ErrorKind> for Error {
@@ -97,6 +100,15 @@ impl From<Context<ErrorKind>> for Error {
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Error {
         Error::from(Context::new(ErrorKind::IoError {
+            error: error.to_string(),
+        }))
+    }
+}
+
+/// map from string parsing errors
+impl From<string::FromUtf8Error> for Error {
+    fn from(error: string::FromUtf8Error) -> Error {
+        Error::from(Context::new(ErrorKind::StringParsingError {
             error: error.to_string(),
         }))
     }

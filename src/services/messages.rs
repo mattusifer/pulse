@@ -9,6 +9,7 @@ use crate::error::Result;
 pub enum ScheduleMessage {
     CheckDiskUsage,
     FetchNews,
+    RunCommand { command_id: String },
 }
 
 impl Message for ScheduleMessage {
@@ -29,6 +30,7 @@ impl From<String> for BroadcastEventKey {
 pub enum BroadcastEventType {
     HighDiskUsage,
     Newscast,
+    GenericMessage,
 }
 
 #[derive(Clone, Debug)]
@@ -41,11 +43,18 @@ pub enum BroadcastEvent {
     Newscast {
         new_york_times: Vec<news::ArticleSection>,
     },
+    GenericMessage {
+        title: String,
+        body: String,
+    },
 }
 
 impl BroadcastEvent {
     pub fn subject_and_body(&self) -> (String, String) {
         match self {
+            BroadcastEvent::GenericMessage { title, body } => {
+                (title.clone(), body.clone())
+            }
             BroadcastEvent::HighDiskUsage {
                 filesystem_mount,
                 current_usage,
@@ -109,6 +118,9 @@ impl BroadcastEvent {
                 BroadcastEventType::HighDiskUsage
             }
             BroadcastEvent::Newscast { .. } => BroadcastEventType::Newscast,
+            BroadcastEvent::GenericMessage { .. } => {
+                BroadcastEventType::GenericMessage
+            }
         }
     }
 
@@ -122,6 +134,9 @@ impl BroadcastEvent {
                 .into(),
             BroadcastEvent::Newscast { .. } => {
                 serde_json::to_string(&self.event_type()).unwrap().into()
+            }
+            BroadcastEvent::GenericMessage { title, .. } => {
+                title.clone().into()
             }
         }
     }
