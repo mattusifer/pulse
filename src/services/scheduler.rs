@@ -7,6 +7,7 @@ use cron::Schedule as CronSchedule;
 
 use super::messages::ScheduleMessage;
 use crate::config::{config, SchedulerConfig};
+use crate::db::{database, models};
 use crate::error::Error;
 
 /// The scheduler is responsible for kicking off configured tasks at
@@ -63,6 +64,18 @@ impl Actor for Scheduler {
                             return;
                         }
                     }
+
+                    // insert the message into the DB
+                    serde_json::to_string(&schedule.message)
+                        .map_err(Into::into)
+                        .and_then(|m| {
+                            database()
+                                .insert_message(models::NewMessage::new(m))
+                                .map(|_| ())
+                        })
+                        .unwrap_or_else(|e| {
+                            eprintln!("{}", Into::<Error>::into(e))
+                        });
 
                     service.do_send(schedule.clone().message).unwrap_or_else(
                         |e| eprintln!("{}", Into::<Error>::into(e)),
@@ -146,7 +159,7 @@ mod test {
             current.stop();
         });
 
-        system.run();
+        run_with_db!(system);
     }
 
     #[test]
@@ -162,6 +175,7 @@ mod test {
 
         let messages_received: Arc<Mutex<Vec<ScheduleMessage>>> =
             Arc::new(Mutex::new(vec![]));
+        let messages_received_clone = Arc::clone(&messages_received);
 
         let test_actor = TestActor {
             messages_recieved: Arc::clone(&messages_received),
@@ -189,7 +203,13 @@ mod test {
             current.stop();
         });
 
-        system.run();
+        let db_state = run_with_db!(system);
+
+        // messages should have been inserted into the database
+        assert!(
+            db_state.messages.len()
+                == messages_received_clone.lock().unwrap().clone().len()
+        );
     }
 
     #[test]
@@ -222,6 +242,6 @@ mod test {
             current.stop();
         });
 
-        system.run();
+        run_with_db!(system);
     }
 }

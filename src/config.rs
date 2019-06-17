@@ -95,6 +95,15 @@ pub struct SchedulerConfig {
 }
 
 #[derive(Clone, Deserialize, Debug)]
+pub struct DatabaseConfig {
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Clone, Deserialize, Debug)]
 pub struct ScheduleConfig {
     pub cron: Option<String>,
     pub message: ScheduleMessage,
@@ -121,6 +130,7 @@ pub struct Config {
     pub news: Option<NewsConfig>,
     pub scheduler: SchedulerConfig,
     pub broadcast: BroadcastConfig,
+    pub database: DatabaseConfig,
 }
 
 impl Default for Config {
@@ -135,6 +145,13 @@ impl Default for Config {
             broadcast: BroadcastConfig {
                 email: None,
                 alerts: vec![],
+            },
+            database: DatabaseConfig {
+                host: "localhost".to_string(),
+                port: 5432,
+                database: "pulse".to_string(),
+                username: "postgres".to_string(),
+                password: "postgres".to_string(),
             },
         }
     }

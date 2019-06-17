@@ -80,6 +80,12 @@ pub enum ErrorKind {
 
     #[fail(display = "io error: {}", error)]
     IoError { error: String },
+
+    #[fail(display = "database connection error: {}", error)]
+    DatabaseConnectionError { error: String },
+
+    #[fail(display = "database query error: {}", error)]
+    DatabaseQueryError { error: String },
 }
 
 impl From<ErrorKind> for Error {
@@ -106,6 +112,22 @@ impl From<io::Error> for Error {
 impl From<toml::de::Error> for Error {
     fn from(error: toml::de::Error) -> Error {
         Error::from(Context::new(ErrorKind::TomlError {
+            error: error.to_string(),
+        }))
+    }
+}
+
+/// map from db connection errors
+impl From<diesel::result::ConnectionError> for Error {
+    fn from(error: diesel::result::ConnectionError) -> Error {
+        Error::from(Context::new(ErrorKind::DatabaseConnectionError {
+            error: error.to_string(),
+        }))
+    }
+}
+impl From<diesel::result::Error> for Error {
+    fn from(error: diesel::result::Error) -> Error {
+        Error::from(Context::new(ErrorKind::DatabaseQueryError {
             error: error.to_string(),
         }))
     }
