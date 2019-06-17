@@ -1,0 +1,16 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: rust:1.35-stretch
+
+    steps:
+      - checkout
+
+      - run:
+          name: Build
+          command: cargo build
+
+      - run:
+          name: Test
+          command: cargo test

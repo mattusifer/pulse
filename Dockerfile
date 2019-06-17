@@ -1,4 +1,4 @@
-FROM rust:1.35
+FROM rust:1.35-stretch
 
 RUN cargo install diesel_cli
 
