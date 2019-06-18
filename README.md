@@ -2,7 +2,7 @@ pulse
 ------------
 A monitor and job scheduler
 
-<!-- [![Linux build status](https://travis-ci.org/mattusifer/pulse.svg)](https://travis-ci.org/mattusifer/pulse) -->
+[![CircleCI](https://circleci.com/gh/mattusifer/pulse.svg?style=svg)](https://circleci.com/gh/mattusifer/pulse)
 
 ### Usage
 Clone, build, and run
