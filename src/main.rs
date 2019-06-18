@@ -8,6 +8,7 @@ mod error;
 mod schema;
 #[macro_use]
 mod services;
+mod routes;
 
 // TODO: remove this when diesel is updated for rust 2018:
 // https://github.com/diesel-rs/diesel/pull/1956
@@ -15,6 +16,7 @@ mod services;
 extern crate diesel;
 
 use actix::prelude::*;
+use actix_web::{web, App, HttpServer};
 
 use crate::{
     error::Result,
@@ -41,6 +43,11 @@ fn main() -> Result<()> {
     scheduler.add_service(Addr::recipient(monitor_addr));
     scheduler.add_service(Addr::recipient(news_addr));
     scheduler.start();
+
+    // start web server
+    HttpServer::new(|| App::new().service(web::resource("/").to(routes::index))) 
+        .bind("0.0.0.0:8088")? 
+        .run()?; 
 
     system.run()?;
 

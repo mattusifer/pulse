@@ -43,45 +43,42 @@ impl Actor for Scheduler {
         let std_tick = Duration::from_millis(tick.into());
 
         for schedule in &self.config.schedules {
-            for service in &self.services {
-                let schedule = schedule.clone();
-                let service = service.clone();
+            let schedule = schedule.clone();
+            let services = self.services.clone();
 
-                // TODO: validate the schedule string before it gets here
-                let cron_schedule = schedule
-                    .cron
-                    .clone()
-                    .and_then(|c| CronSchedule::from_str(&c).ok());
+            // TODO: validate the cron syntax before it gets here
+            let cron_schedule = schedule
+                .cron
+                .clone()
+                .and_then(|c| CronSchedule::from_str(&c).ok());
 
-                ctx.run_interval(std_tick, move |_, _| {
-                    if let Some(ref cron_schedule) = cron_schedule {
-                        let next_date =
-                            cron_schedule.upcoming(Local).next().unwrap();
-                        let one_tick_before = next_date - chrono_tick;
-                        let now = Local::now();
+            ctx.run_interval(std_tick, move |_, _| {
+                if let Some(ref cron_schedule) = cron_schedule {
+                    let next_date = cron_schedule.upcoming(Local).next().unwrap();
+                    let one_tick_before = next_date - chrono_tick;
+                    let now = Local::now();
 
-                        if !(one_tick_before <= now && now <= next_date) {
-                            return;
-                        }
+                    if !(one_tick_before <= now && now <= next_date) {
+                        return;
                     }
+                }
 
-                    // insert the message into the DB
-                    serde_json::to_string(&schedule.message)
-                        .map_err(Into::into)
-                        .and_then(|m| {
-                            database()
-                                .insert_message(models::NewMessage::new(m))
-                                .map(|_| ())
-                        })
-                        .unwrap_or_else(|e| {
-                            eprintln!("{}", Into::<Error>::into(e))
-                        });
+                // insert the message into the DB
+                serde_json::to_string(&schedule.message)
+                    .map_err(Into::into)
+                    .and_then(|m| {
+                        database()
+                            .insert_message(models::NewMessage::new(m))
+                            .map(|_| ())
+                    })
+                    .unwrap_or_else(|e| eprintln!("{}", Into::<Error>::into(e)));
 
-                    service.do_send(schedule.clone().message).unwrap_or_else(
-                        |e| eprintln!("{}", Into::<Error>::into(e)),
-                    )
-                });
-            }
+                for service in &services {
+                    service
+                        .do_send(schedule.clone().message)
+                        .unwrap_or_else(|e| eprintln!("{}", Into::<Error>::into(e)))
+                }
+            });
         }
     }
 }
@@ -109,11 +106,7 @@ mod test {
     impl Handler<ScheduleMessage> for TestActor {
         type Result = Result<()>;
 
-        fn handle(
-            &mut self,
-            msg: ScheduleMessage,
-            _ctx: &mut Context<Self>,
-        ) -> Self::Result {
+        fn handle(&mut self, msg: ScheduleMessage, _ctx: &mut Context<Self>) -> Self::Result {
             self.messages_recieved.lock().unwrap().push(msg);
             Ok(())
         }
@@ -130,8 +123,7 @@ mod test {
 
         let system = System::new("test");
 
-        let messages_received: Arc<Mutex<Vec<ScheduleMessage>>> =
-            Arc::new(Mutex::new(vec![]));
+        let messages_received: Arc<Mutex<Vec<ScheduleMessage>>> = Arc::new(Mutex::new(vec![]));
 
         let test_actor = TestActor {
             messages_recieved: Arc::clone(&messages_received),
@@ -173,8 +165,7 @@ mod test {
 
         let system = System::new("test");
 
-        let messages_received: Arc<Mutex<Vec<ScheduleMessage>>> =
-            Arc::new(Mutex::new(vec![]));
+        let messages_received: Arc<Mutex<Vec<ScheduleMessage>>> = Arc::new(Mutex::new(vec![]));
         let messages_received_clone = Arc::clone(&messages_received);
 
         let test_actor = TestActor {
@@ -206,10 +197,7 @@ mod test {
         let db_state = run_with_db!(system);
 
         // messages should have been inserted into the database
-        assert!(
-            db_state.messages.len()
-                == messages_received_clone.lock().unwrap().clone().len()
-        );
+        assert!(db_state.messages.len() == messages_received_clone.lock().unwrap().clone().len());
     }
 
     #[test]
@@ -223,8 +211,7 @@ mod test {
 
         let system = System::new("test");
 
-        let messages_received: Arc<Mutex<Vec<ScheduleMessage>>> =
-            Arc::new(Mutex::new(vec![]));
+        let messages_received: Arc<Mutex<Vec<ScheduleMessage>>> = Arc::new(Mutex::new(vec![]));
 
         TestActor {
             messages_recieved: Arc::clone(&messages_received),
