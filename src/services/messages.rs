@@ -6,12 +6,19 @@ use crate::error::Result;
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum ScheduleMessage {
+pub enum ScheduledStreamMessage {
     CheckDiskUsage,
-    FetchNews,
+}
+impl Message for ScheduledStreamMessage {
+    type Result = Result<()>;
 }
 
-impl Message for ScheduleMessage {
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScheduledTaskMessage {
+    FetchNews,
+}
+impl Message for ScheduledTaskMessage {
     type Result = Result<()>;
 }
 
@@ -35,8 +42,8 @@ pub enum BroadcastEventType {
 pub enum BroadcastEvent {
     HighDiskUsage {
         filesystem_mount: String,
-        current_usage: f32,
-        max_usage: f32,
+        current_usage: f64,
+        max_usage: f64,
     },
     Newscast {
         new_york_times: Vec<news::ArticleSection>,

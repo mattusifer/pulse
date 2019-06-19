@@ -1,5 +1,10 @@
-use std::{fs::File, io::Read, path::PathBuf, sync::Mutex, time::Duration};
+use std::{
+    fs::File, io::Read, path::PathBuf, str::FromStr, sync::Mutex,
+    time::Duration,
+};
 
+use chrono::Local;
+use cron::Schedule as CronSchedule;
 use lazy_static::lazy_static;
 use nytrs::request::{MostPopularPeriod, ShareType};
 use serde::Deserialize;
@@ -7,7 +12,8 @@ use serde::Deserialize;
 use crate::constants;
 use crate::error::Result;
 use crate::services::messages::{
-    BroadcastEventType, BroadcastMedium, ScheduleMessage,
+    BroadcastEventType, BroadcastMedium, ScheduledStreamMessage,
+    ScheduledTaskMessage,
 };
 
 lazy_static! {
@@ -66,7 +72,7 @@ pub struct BroadcastConfig {
 #[derive(Clone, Deserialize, Debug)]
 pub struct FilesystemConfig {
     pub mount: PathBuf,
-    pub available_space_alert_above: f32,
+    pub available_space_alert_above: f64,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -90,8 +96,7 @@ pub struct NewsConfig {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct SchedulerConfig {
-    pub schedules: Vec<ScheduleConfig>,
-    pub tick_ms: u32,
+    pub tasks: Vec<ScheduledTaskConfig>,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -104,9 +109,25 @@ pub struct DatabaseConfig {
 }
 
 #[derive(Clone, Deserialize, Debug)]
-pub struct ScheduleConfig {
-    pub cron: Option<String>,
-    pub message: ScheduleMessage,
+pub struct ScheduledStreamConfig {
+    pub message: ScheduledStreamMessage,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct ScheduledTaskConfig {
+    pub cron: String,
+    pub message: ScheduledTaskMessage,
+}
+
+impl ScheduledTaskConfig {
+    pub fn duration_until_next(&self) -> Duration {
+        // TODO: validate the cron syntax before it gets here
+        let cron_schedule = CronSchedule::from_str(&self.cron).ok().unwrap();
+        let now = Local::now();
+        let next = cron_schedule.upcoming(Local).next().unwrap();
+        let duration_until = next.signed_duration_since(now);
+        Duration::from_millis(duration_until.num_milliseconds() as u64)
+    }
 }
 
 #[derive(Clone, Deserialize, Debug, PartialEq, Eq)]
@@ -128,7 +149,8 @@ pub struct AlertConfig {
 pub struct Config {
     pub system_monitor: Option<SystemMonitorConfig>,
     pub news: Option<NewsConfig>,
-    pub scheduler: SchedulerConfig,
+    pub tasks: Vec<ScheduledTaskConfig>,
+    pub streams: Vec<ScheduledStreamConfig>,
     pub broadcast: BroadcastConfig,
     pub database: DatabaseConfig,
 }
@@ -138,10 +160,8 @@ impl Default for Config {
         Self {
             system_monitor: None,
             news: None,
-            scheduler: SchedulerConfig {
-                schedules: vec![],
-                tick_ms: 5000,
-            },
+            streams: vec![],
+            tasks: vec![],
             broadcast: BroadcastConfig {
                 email: None,
                 alerts: vec![],

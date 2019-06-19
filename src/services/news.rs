@@ -4,7 +4,7 @@ use nytrs::NewYorkTimes;
 
 use super::{
     broadcast::OUTBOX,
-    messages::{BroadcastEvent, ScheduleMessage},
+    messages::{BroadcastEvent, ScheduledTaskMessage},
 };
 use crate::{
     config::{config, NewsConfig},
@@ -95,16 +95,16 @@ impl Actor for News {
     type Context = Context<Self>;
 }
 
-impl Handler<ScheduleMessage> for News {
+impl Handler<ScheduledTaskMessage> for News {
     type Result = Result<()>;
 
     fn handle(
         &mut self,
-        msg: ScheduleMessage,
+        msg: ScheduledTaskMessage,
         _ctx: &mut Context<Self>,
     ) -> Self::Result {
         match msg {
-            ScheduleMessage::FetchNews => self.build_newscast(),
+            ScheduledTaskMessage::FetchNews => self.build_newscast(),
             _ => Ok(()),
         }
     }

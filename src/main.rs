@@ -31,6 +31,7 @@ fn main() -> Result<()> {
 
     config::initialize_from_file()?;
     db::initialize_postgres()?;
+    log::info!("Database connection initialized");
 
     let system = System::new("pulse");
 
@@ -40,14 +41,17 @@ fn main() -> Result<()> {
     let news_addr = News::new().start();
 
     let mut scheduler = Scheduler::new();
-    scheduler.add_service(Addr::recipient(monitor_addr));
-    scheduler.add_service(Addr::recipient(news_addr));
+    scheduler.add_task_runner(Addr::recipient(news_addr));
     scheduler.start();
+    log::info!("Scheduler started");
 
     // start web server
-    HttpServer::new(|| App::new().service(web::resource("/").to(routes::index))) 
-        .bind("0.0.0.0:8088")? 
-        .run()?; 
+    HttpServer::new(|| {
+        App::new().service(web::resource("/").to(routes::index))
+    })
+    .bind("127.0.0.1:8088")?
+    .run()?;
+    log::info!("Web server running at localhost:8088");
 
     system.run()?;
 

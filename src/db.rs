@@ -3,7 +3,11 @@ use std::sync::{Arc, Mutex};
 use diesel::{pg::PgConnection, prelude::*};
 use lazy_static::lazy_static;
 
-use crate::{config, error::Result, schema::messages};
+use crate::{
+    config,
+    error::Result,
+    schema::{disk_usage, tasks},
+};
 
 pub mod models;
 
@@ -48,19 +52,24 @@ impl Database {
         }
     }
 
-    pub fn insert_message(
+    pub fn insert_task(&self, task: models::NewTask) -> Result<models::Task> {
+        self.inner.lock().unwrap().insert_task(task)
+    }
+
+    pub fn insert_disk_usage(
         &self,
-        message: models::NewMessage,
-    ) -> Result<models::Message> {
-        self.inner.lock().unwrap().insert_message(message)
+        disk_usage: models::NewDiskUsage,
+    ) -> Result<models::DiskUsage> {
+        self.inner.lock().unwrap().insert_disk_usage(disk_usage)
     }
 }
 
 pub trait DatabaseInner {
-    fn insert_message(
+    fn insert_task(&self, task: models::NewTask) -> Result<models::Task>;
+    fn insert_disk_usage(
         &self,
-        message: models::NewMessage,
-    ) -> Result<models::Message>;
+        disk_usage: models::NewDiskUsage,
+    ) -> Result<models::DiskUsage>;
 }
 
 pub struct PostgresDatabase {
@@ -86,12 +95,19 @@ impl PostgresDatabase {
 }
 
 impl DatabaseInner for PostgresDatabase {
-    fn insert_message(
+    fn insert_task(&self, task: models::NewTask) -> Result<models::Task> {
+        diesel::insert_into(tasks::table)
+            .values(&task)
+            .get_result(&self.connection)
+            .map_err(Into::into)
+    }
+
+    fn insert_disk_usage(
         &self,
-        message: models::NewMessage,
-    ) -> Result<models::Message> {
-        diesel::insert_into(messages::table)
-            .values(&message)
+        disk_usage: models::NewDiskUsage,
+    ) -> Result<models::DiskUsage> {
+        diesel::insert_into(disk_usage::table)
+            .values(&disk_usage)
             .get_result(&self.connection)
             .map_err(Into::into)
     }
@@ -123,12 +139,16 @@ pub mod test {
 
     #[derive(Debug, Clone)]
     pub struct TestDatabaseState {
-        pub messages: Vec<models::Message>,
+        pub tasks: Vec<models::Task>,
+        pub disk_usage: Vec<models::DiskUsage>,
     }
 
     impl TestDatabaseState {
         pub fn new() -> Self {
-            Self { messages: vec![] }
+            Self {
+                tasks: vec![],
+                disk_usage: vec![],
+            }
         }
     }
 
@@ -143,19 +163,33 @@ pub mod test {
     }
 
     impl DatabaseInner for TestDatabase {
-        fn insert_message(
-            &self,
-            message: models::NewMessage,
-        ) -> Result<models::Message> {
-            let message = models::Message {
+        fn insert_task(&self, task: models::NewTask) -> Result<models::Task> {
+            let task = models::Task {
                 id: 0,
-                message: message.message,
+                task: task.task,
                 sent_at: PgTimestamp(0),
             };
 
             let mut state = self.state.lock().unwrap();
-            state.messages.push(message.clone());
-            Ok(message)
+            state.tasks.push(task.clone());
+            Ok(task)
+        }
+
+        fn insert_disk_usage(
+            &self,
+            disk_usage: models::NewDiskUsage,
+        ) -> Result<models::DiskUsage> {
+            let disk_usage = models::DiskUsage {
+                id: 0,
+                mount: disk_usage.mount,
+                available_space: disk_usage.available_space,
+                space_used: disk_usage.space_used,
+                recorded_at: PgTimestamp(0),
+            };
+
+            let mut state = self.state.lock().unwrap();
+            state.disk_usage.push(disk_usage.clone());
+            Ok(disk_usage)
         }
     }
 
@@ -166,6 +200,8 @@ pub mod test {
     #[macro_export]
     macro_rules! run_with_db {
         ($system:expr) => {{
+            use std::sync::{Arc, Mutex};
+
             use crate::db::{self, test};
 
             let _lock = test::lock_database();
