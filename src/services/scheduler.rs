@@ -132,7 +132,7 @@ mod test {
 
         let current = System::current();
         thread::spawn(move || {
-            thread::sleep(time::Duration::from_millis(3000));
+            thread::sleep(time::Duration::from_millis(3750));
 
             let messages = messages_received.lock().unwrap().clone();
 
