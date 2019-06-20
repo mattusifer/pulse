@@ -146,7 +146,7 @@ mod test {
         run_with_outbox!({
             let current = System::current();
             thread::spawn(move || {
-                thread::sleep(Duration::from_millis(2000));
+                thread::sleep(Duration::from_millis(5000));
 
                 let outgoing_message = OUTBOX.pop().unwrap();
                 assert_eq!(
@@ -159,6 +159,6 @@ mod test {
         });
 
         let state = run_with_db!(system);
-        assert!(state.disk_usage.len() > 2);
+        assert!(state.disk_usage.len() > 1);
     }
 }
