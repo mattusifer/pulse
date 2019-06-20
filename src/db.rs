@@ -182,8 +182,7 @@ pub mod test {
             let disk_usage = models::DiskUsage {
                 id: 0,
                 mount: disk_usage.mount,
-                available_space: disk_usage.available_space,
-                space_used: disk_usage.space_used,
+                percent_disk_used: disk_usage.percent_disk_used,
                 recorded_at: PgTimestamp(0),
             };
 

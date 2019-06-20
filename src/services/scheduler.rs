@@ -145,7 +145,7 @@ mod test {
         });
 
         let state = run_with_db!(system);
-        assert!(state.tasks.len() == 3);
+        assert!(state.tasks.len() > 1);
     }
 
     #[test]

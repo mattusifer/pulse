@@ -1,4 +1,4 @@
-use diesel::{pg::data_types::*, Insertable, Queryable};
+use diesel::{data_types::*, Insertable, Queryable};
 
 use crate::schema::{disk_usage, tasks};
 
@@ -25,8 +25,7 @@ impl NewTask {
 pub struct DiskUsage {
     pub id: i32,
     pub mount: String,
-    pub available_space: i64,
-    pub space_used: i64,
+    pub percent_disk_used: f64,
     pub recorded_at: PgTimestamp,
 }
 
@@ -34,20 +33,14 @@ pub struct DiskUsage {
 #[table_name = "disk_usage"]
 pub struct NewDiskUsage {
     pub mount: String,
-    pub available_space: i64,
-    pub space_used: i64,
+    pub percent_disk_used: f64,
 }
 
 impl NewDiskUsage {
-    pub fn new<S: Into<String>>(
-        mount: S,
-        available_space: i64,
-        space_used: i64,
-    ) -> Self {
+    pub fn new<S: Into<String>>(mount: S, percent_disk_used: f64) -> Self {
         NewDiskUsage {
             mount: mount.into(),
-            available_space,
-            space_used,
+            percent_disk_used,
         }
     }
 }

@@ -62,19 +62,19 @@ impl SystemMonitor {
     ) -> Result<()> {
         self.get_mount(filesystem_config)
             .and_then(|filesystem| {
-                let space_used =
-                    filesystem.total.as_u64() - filesystem.avail.as_u64();
+                let space_used = (filesystem.total.as_u64()
+                    - filesystem.avail.as_u64())
+                    as f64;
 
                 database()
                     .insert_disk_usage(models::NewDiskUsage::new(
                         filesystem.fs_mounted_on.clone(),
-                        space_used as i64,
-                        filesystem.total.as_u64() as i64,
+                        space_used,
                     ))
                     .map(|_| (filesystem, space_used))
             })
             .and_then(|(filesystem, space_used)| {
-                let disk_usage = (space_used as f64
+                let disk_usage = (space_used
                     / filesystem.total.as_u64() as f64)
                     * 100 as f64;
 

@@ -2,8 +2,7 @@ table! {
     disk_usage (id) {
         id -> Int4,
         mount -> Varchar,
-        available_space -> Int8,
-        space_used -> Int8,
+        percent_disk_used -> Float8,
         recorded_at -> Timestamptz,
     }
 }
