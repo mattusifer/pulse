@@ -159,6 +159,6 @@ mod test {
         });
 
         let state = run_with_db!(system);
-        assert!(state.disk_usage.len() == 4);
+        assert!(state.disk_usage.len() > 2);
     }
 }
