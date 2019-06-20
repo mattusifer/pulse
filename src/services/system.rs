@@ -62,22 +62,20 @@ impl SystemMonitor {
     ) -> Result<()> {
         self.get_mount(filesystem_config)
             .and_then(|filesystem| {
-                let space_used = (filesystem.total.as_u64()
+                let disk_usage = ((filesystem.total.as_u64()
                     - filesystem.avail.as_u64())
-                    as f64;
+                    as f64
+                    / filesystem.total.as_u64() as f64)
+                    * 100 as f64;
 
                 database()
                     .insert_disk_usage(models::NewDiskUsage::new(
                         filesystem.fs_mounted_on.clone(),
-                        space_used,
+                        disk_usage,
                     ))
-                    .map(|_| (filesystem, space_used))
+                    .map(|_| (filesystem, disk_usage))
             })
-            .and_then(|(filesystem, space_used)| {
-                let disk_usage = (space_used
-                    / filesystem.total.as_u64() as f64)
-                    * 100 as f64;
-
+            .and_then(|(filesystem, disk_usage)| {
                 if disk_usage > filesystem_config.available_space_alert_above {
                     let message = BroadcastEvent::HighDiskUsage {
                         filesystem_mount: filesystem.fs_mounted_on,
