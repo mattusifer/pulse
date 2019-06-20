@@ -136,7 +136,7 @@ mod test {
 
             let messages = messages_received.lock().unwrap().clone();
 
-            assert!(messages.len() > 2);
+            assert!(messages.len() > 1);
             assert!(messages
                 .into_iter()
                 .all(|msg| msg == ScheduledTaskMessage::FetchNews));
