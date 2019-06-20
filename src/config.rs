@@ -95,11 +95,6 @@ pub struct NewsConfig {
 }
 
 #[derive(Clone, Deserialize, Debug)]
-pub struct SchedulerConfig {
-    pub tasks: Vec<ScheduledTaskConfig>,
-}
-
-#[derive(Clone, Deserialize, Debug)]
 pub struct DatabaseConfig {
     pub host: String,
     pub port: u16,

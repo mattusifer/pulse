@@ -100,7 +100,7 @@ impl Actor for SystemMonitor {
     /// When the system monitor is started, begin continually running
     /// the configured tasks
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::from_millis(250), move |this, _ctx| {
+        ctx.run_interval(Duration::from_millis(1000), move |this, _ctx| {
             for stream in &this.streams {
                 match stream.message {
                     ScheduledStreamMessage::CheckDiskUsage => {
