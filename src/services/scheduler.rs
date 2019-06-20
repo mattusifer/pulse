@@ -132,11 +132,11 @@ mod test {
 
         let current = System::current();
         thread::spawn(move || {
-            thread::sleep(time::Duration::from_millis(3750));
+            thread::sleep(time::Duration::from_millis(5000));
 
             let messages = messages_received.lock().unwrap().clone();
 
-            assert!(messages.len() == 3);
+            assert!(messages.len() > 2);
             assert!(messages
                 .into_iter()
                 .all(|msg| msg == ScheduledTaskMessage::FetchNews));
