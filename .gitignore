@@ -1,2 +1,5 @@
 /target
 **/*.rs.bk
+
+/webapp/elm-stuff
+/webapp/public/main.js
