@@ -15,7 +15,7 @@ mod routes;
 #[macro_use]
 extern crate diesel;
 
-use actix::{Actor, Addr};
+use actix::{Actor, Addr, System};
 use actix_files::Files;
 use actix_web::{middleware, App, HttpServer};
 
@@ -34,26 +34,28 @@ fn main() -> Result<()> {
     db::initialize_postgres()?;
     log::info!("Database connection initialized");
 
-    HttpServer::new(move || {
-        let maybe_broadcast =
-            Broadcast::new().expect("Broadcast actor could not be initialized");
-        if let Some(broadcast) = maybe_broadcast {
-            broadcast.start();
-        }
-        SystemMonitor::new().start();
+    let system = System::new("pulse");
 
-        let news_addr = News::new().start();
-        let mut scheduler = Scheduler::new();
-        scheduler.add_task_runner(Addr::recipient(news_addr));
-        scheduler.start();
-        log::info!("Scheduler started");
+    if let Some(broadcast) = Broadcast::new()? {
+        broadcast.start();
+    }
+    SystemMonitor::new().start();
 
+    let news_addr = News::new().start();
+    let mut scheduler = Scheduler::new();
+    scheduler.add_task_runner(Addr::recipient(news_addr));
+    scheduler.start();
+    log::info!("Scheduler started");
+
+    HttpServer::new(|| {
         App::new().wrap(middleware::Logger::default()).service(
             Files::new("/", "./webapp/public/").index_file("index.html"),
         )
     })
     .bind("127.0.0.1:8088")?
-    .run()?;
+    .start();
+
+    system.run()?;
 
     Ok(())
 }

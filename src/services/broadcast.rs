@@ -2,6 +2,7 @@ mod email;
 
 use std::{
     collections::HashMap,
+    sync::{Mutex, MutexGuard},
     time::{Duration, Instant},
 };
 
@@ -17,9 +18,12 @@ use crate::{
     },
 };
 
+type LastAlerted = HashMap<BroadcastEventKey, Instant>;
+
 lazy_static! {
     pub static ref OUTBOX: ArrayQueue<BroadcastEvent> =
         ArrayQueue::new(100_000);
+    static ref LAST_ALERTED: Mutex<LastAlerted> = Mutex::new(HashMap::new());
 }
 
 const BROADCAST_TICK_INTERVAL: u64 = 500;
@@ -27,6 +31,7 @@ const BROADCAST_TICK_INTERVAL: u64 = 500;
 trait BroadcastPorts {
     fn send_email(&self, subject: String, body: String) -> Result<()>;
     fn get_next_event(&self) -> Option<BroadcastEvent>;
+    fn lock_last_alerted(&self) -> MutexGuard<LastAlerted>;
 }
 
 struct LiveBroadcastPorts {
@@ -40,11 +45,14 @@ impl BroadcastPorts for LiveBroadcastPorts {
     fn get_next_event(&self) -> Option<BroadcastEvent> {
         OUTBOX.pop().ok()
     }
+
+    fn lock_last_alerted(&self) -> MutexGuard<LastAlerted> {
+        LAST_ALERTED.lock().unwrap()
+    }
 }
 
 pub struct Broadcast {
     alerts: HashMap<BroadcastEventType, AlertConfig>,
-    last_alerted: HashMap<BroadcastEventKey, Instant>,
     ports: Box<BroadcastPorts + Send + Sync>,
 }
 
@@ -60,7 +68,6 @@ impl Broadcast {
                     .iter()
                     .map(|alert| (alert.event.clone(), alert.clone()))
                     .collect(),
-                last_alerted: vec![].into_iter().collect(),
                 ports: Box::new(LiveBroadcastPorts { email_config }),
             }))
         } else {
@@ -73,11 +80,7 @@ impl Broadcast {
         alerts: HashMap<BroadcastEventType, AlertConfig>,
         ports: Box<BroadcastPorts + Send + Sync>,
     ) -> Self {
-        Self {
-            alerts,
-            last_alerted: vec![].into_iter().collect(),
-            ports,
-        }
+        Self { alerts, ports }
     }
 }
 
@@ -93,12 +96,12 @@ impl Actor for Broadcast {
                     log::debug!("Broadcast received message: {:?}", message.event_type());
 
                     let alerts_map = this.alerts.clone();
-                    let last_alerted_map = this.last_alerted.clone();
 
                     let message_id = message.event_key();
                     let message_type = message.event_type();
 
-                    let last_alerted = last_alerted_map.get(&message_id);
+                    let mut locked_last_alerted = this.ports.lock_last_alerted();
+                    let last_alerted = locked_last_alerted.get(&message_id);
 
                     // get the configuration for this message, if it exists
                     match alerts_map.get(&message_type) {
@@ -136,7 +139,7 @@ impl Actor for Broadcast {
                                 message_type,
                                 alert_config.clone(),
                             );
-                            this.last_alerted.insert(
+                            locked_last_alerted.insert(
                                 message_id,
                                 Instant::now()
                             );
@@ -168,25 +171,55 @@ pub mod test {
     };
 
     struct TestBroadcastPorts {
-        sent_emails: Vec<(String, String)>,
-        events_buffer: Vec<BroadcastEvent>,
+        sent_emails: Arc<Mutex<Vec<(String, String)>>>,
+        events_buffer: Arc<Mutex<Vec<BroadcastEvent>>>,
+        last_alerted: Arc<Mutex<LastAlerted>>,
     }
     impl TestBroadcastPorts {
-        pub fn new(events_buffer: Vec<BroadcastEvent>) -> Self {
+        pub fn new() -> Self {
             Self {
-                sent_emails: vec![],
-                events_buffer,
+                sent_emails: Arc::new(Mutex::new(vec![])),
+                events_buffer: Arc::new(Mutex::new(vec![])),
+                last_alerted: Arc::new(Mutex::new(HashMap::new())),
             }
         }
+
+        pub fn with_sent_emails(
+            mut self,
+            sent_emails: Arc<Mutex<Vec<(String, String)>>>,
+        ) -> Self {
+            self.sent_emails = sent_emails;
+            self
+        }
+
+        pub fn with_events_buffer(
+            mut self,
+            events_buffer: Arc<Mutex<Vec<BroadcastEvent>>>,
+        ) -> Self {
+            self.events_buffer = events_buffer;
+            self
+        }
+
+        pub fn with_last_alerted(
+            mut self,
+            last_alerted: Arc<Mutex<LastAlerted>>,
+        ) -> Self {
+            self.last_alerted = last_alerted;
+            self
+        }
     }
-    impl BroadcastPorts for Arc<Mutex<TestBroadcastPorts>> {
+    impl BroadcastPorts for TestBroadcastPorts {
         fn send_email(&self, subject: String, body: String) -> Result<()> {
-            self.lock().unwrap().sent_emails.push((subject, body));
+            self.sent_emails.lock().unwrap().push((subject, body));
             Ok(())
         }
 
         fn get_next_event(&self) -> Option<BroadcastEvent> {
-            self.lock().unwrap().events_buffer.pop()
+            self.events_buffer.lock().unwrap().pop()
+        }
+
+        fn lock_last_alerted(&self) -> MutexGuard<LastAlerted> {
+            self.last_alerted.lock().unwrap()
         }
     }
 
@@ -212,9 +245,13 @@ pub mod test {
 
         let system = System::new("test");
 
-        let ports = Arc::new(Mutex::new(TestBroadcastPorts::new(vec![event])));
+        let sent_emails = Arc::new(Mutex::new(vec![]));
 
-        Broadcast::test(alerts, Box::new(Arc::clone(&ports))).start();
+        let ports = TestBroadcastPorts::new()
+            .with_events_buffer(Arc::new(Mutex::new(vec![event])))
+            .with_sent_emails(Arc::clone(&sent_emails));
+
+        Broadcast::test(alerts, Box::new(ports)).start();
 
         let current = System::current();
         thread::spawn(move || {
@@ -224,7 +261,7 @@ pub mod test {
 
         system.run().unwrap();
 
-        assert_eq!(ports.lock().unwrap().sent_emails.len(), 1);
+        assert_eq!(sent_emails.lock().unwrap().len(), 1);
     }
 
     #[test]
@@ -256,9 +293,13 @@ pub mod test {
 
         let system = System::new("test");
 
-        let ports = Arc::new(Mutex::new(TestBroadcastPorts::new(events)));
+        let sent_emails = Arc::new(Mutex::new(vec![]));
 
-        Broadcast::test(alerts, Box::new(Arc::clone(&ports))).start();
+        let ports = TestBroadcastPorts::new()
+            .with_events_buffer(Arc::new(Mutex::new(events)))
+            .with_sent_emails(Arc::clone(&sent_emails));
+
+        Broadcast::test(alerts, Box::new(ports)).start();
 
         let current = System::current();
         thread::spawn(move || {
@@ -267,7 +308,7 @@ pub mod test {
         });
 
         system.run().unwrap();
-        assert_eq!(ports.lock().unwrap().sent_emails.len(), 2);
+        assert_eq!(sent_emails.lock().unwrap().len(), 2);
     }
 
     #[test]
@@ -290,17 +331,22 @@ pub mod test {
             current_usage: 100.00,
             max_usage: 50.00,
         };
-        let mut events: Vec<BroadcastEvent> = vec![];
+        let events: Arc<Mutex<Vec<BroadcastEvent>>> =
+            Arc::new(Mutex::new(vec![]));
+        let events_clone = Arc::clone(&events);
         for _ in 1..10 {
-            events.push(event.clone());
+            events.lock().unwrap().push(event.clone());
         }
 
         let system = System::new("test");
 
-        let ports = Arc::new(Mutex::new(TestBroadcastPorts::new(events)));
-        let ports_clone = Arc::clone(&ports);
+        let sent_emails = Arc::new(Mutex::new(vec![]));
 
-        Broadcast::test(alerts, Box::new(Arc::clone(&ports))).start();
+        let ports = TestBroadcastPorts::new()
+            .with_events_buffer(Arc::clone(&events))
+            .with_sent_emails(Arc::clone(&sent_emails));
+
+        Broadcast::test(alerts, Box::new(ports)).start();
 
         let current = System::current();
         thread::spawn(move || {
@@ -308,11 +354,7 @@ pub mod test {
 
             // push another one, this one should get alerted on
             // now that we're past the alert interval
-            ports_clone
-                .lock()
-                .unwrap()
-                .events_buffer
-                .push(event.clone());
+            events_clone.lock().unwrap().push(event.clone());
 
             thread::sleep(Duration::from_millis(BROADCAST_TICK_INTERVAL));
             current.stop()
@@ -320,6 +362,6 @@ pub mod test {
 
         system.run().unwrap();
 
-        assert_eq!(ports.lock().unwrap().sent_emails.len(), 2);
+        assert_eq!(sent_emails.lock().unwrap().len(), 2);
     }
 }
