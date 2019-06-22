@@ -34,8 +34,12 @@ fn main() -> Result<()> {
     db::initialize_postgres()?;
     log::info!("Database connection initialized");
 
-    HttpServer::new(|| {
-        Broadcast::new().start();
+    HttpServer::new(move || {
+        let maybe_broadcast =
+            Broadcast::new().expect("Broadcast actor could not be initialized");
+        if let Some(broadcast) = maybe_broadcast {
+            broadcast.start();
+        }
         SystemMonitor::new().start();
 
         let news_addr = News::new().start();

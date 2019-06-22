@@ -29,7 +29,7 @@ pub struct DiskUsage {
     pub recorded_at: PgTimestamp,
 }
 
-#[derive(Insertable)]
+#[derive(Insertable, Clone)]
 #[table_name = "disk_usage"]
 pub struct NewDiskUsage {
     pub mount: String,

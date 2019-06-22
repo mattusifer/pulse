@@ -1,8 +1,7 @@
-pub mod email;
+mod email;
 
 use std::{
     collections::HashMap,
-    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -10,10 +9,12 @@ use actix::prelude::*;
 use crossbeam::queue::ArrayQueue;
 use lazy_static::lazy_static;
 
-use crate::config::{config, AlertConfig, AlertType};
-use crate::services::broadcast::email::{Emailer, SendEmail};
-use crate::services::messages::{
-    BroadcastEvent, BroadcastEventKey, BroadcastEventType, BroadcastMedium,
+use crate::{
+    config::{config, AlertConfig, AlertType, EmailConfig},
+    error::{Error, Result},
+    services::messages::{
+        BroadcastEvent, BroadcastEventKey, BroadcastEventType, BroadcastMedium,
+    },
 };
 
 lazy_static! {
@@ -23,41 +24,60 @@ lazy_static! {
 
 const BROADCAST_TICK_INTERVAL: u64 = 500;
 
-pub struct BroadcastInner {
-    alerts: HashMap<BroadcastEventType, AlertConfig>,
-    last_alerted: HashMap<BroadcastEventKey, Instant>,
-    emailer: Option<Box<dyn SendEmail>>,
+trait BroadcastPorts {
+    fn send_email(&self, subject: String, body: String) -> Result<()>;
+    fn get_next_event(&self) -> Option<BroadcastEvent>;
 }
 
-impl BroadcastInner {
-    pub fn new() -> Self {
-        let config = config().broadcast;
-        Self {
-            alerts: config
-                .alerts
-                .iter()
-                .map(|alert| (alert.event.clone(), alert.clone()))
-                .collect(),
-            last_alerted: vec![].into_iter().collect(),
-            emailer: config.email.map(Emailer::new),
-        }
+struct LiveBroadcastPorts {
+    email_config: EmailConfig,
+}
+impl BroadcastPorts for LiveBroadcastPorts {
+    fn send_email(&self, subject: String, body: String) -> Result<()> {
+        email::send_email(&self.email_config, subject, body)
+    }
+
+    fn get_next_event(&self) -> Option<BroadcastEvent> {
+        OUTBOX.pop().ok()
     }
 }
 
 pub struct Broadcast {
-    broadcast: Arc<RwLock<BroadcastInner>>,
+    alerts: HashMap<BroadcastEventType, AlertConfig>,
+    last_alerted: HashMap<BroadcastEventKey, Instant>,
+    ports: Box<BroadcastPorts + Send + Sync>,
 }
+
 impl Broadcast {
-    pub fn new() -> Self {
-        Self {
-            broadcast: Arc::new(RwLock::new(BroadcastInner::new())),
+    pub fn new() -> Result<Option<Self>> {
+        let config = config().broadcast;
+        if config.alerts.is_empty() {
+            Ok(None)
+        } else if let Some(email_config) = config.email {
+            Ok(Some(Self {
+                alerts: config
+                    .alerts
+                    .iter()
+                    .map(|alert| (alert.event.clone(), alert.clone()))
+                    .collect(),
+                last_alerted: vec![].into_iter().collect(),
+                ports: Box::new(LiveBroadcastPorts { email_config }),
+            }))
+        } else {
+            Err(Error::unconfigured_email())
         }
     }
 
     #[cfg(test)]
-    pub fn with_emailer(self, emailer: Box<dyn SendEmail>) -> Self {
-        self.broadcast.write().unwrap().emailer = Some(emailer);
-        self
+    fn test(
+        alerts: HashMap<BroadcastEventType, AlertConfig>,
+        ports: Box<BroadcastPorts + Send + Sync>,
+    ) -> Self {
+        Self {
+            alerts,
+            last_alerted: vec![].into_iter().collect(),
+            ports,
+        }
     }
 }
 
@@ -66,15 +86,14 @@ impl Actor for Broadcast {
 
     /// Start a tick for the broadcast actor
     fn started(&mut self, ctx: &mut Context<Self>) {
-        let broadcast = Arc::clone(&self.broadcast);
         ctx.run_interval(
             Duration::from_millis(BROADCAST_TICK_INTERVAL),
-            move |_, _| {
-                while let Ok(message) = OUTBOX.pop() {
+            move |this, _| {
+                while let Some(message) = this.ports.get_next_event() {
                     log::debug!("Broadcast received message: {:?}", message.event_type());
 
-                    let alerts_map = broadcast.read().unwrap().alerts.clone();
-                    let last_alerted_map = broadcast.read().unwrap().last_alerted.clone();
+                    let alerts_map = this.alerts.clone();
+                    let last_alerted_map = this.last_alerted.clone();
 
                     let message_id = message.event_key();
                     let message_type = message.event_type();
@@ -104,34 +123,29 @@ impl Actor for Broadcast {
                             for medium in &alert_config.mediums {
                                 match medium {
                                     BroadcastMedium::Email => {
-                                        if let Some(ref emailer) = broadcast
-                                            .read() 
-                                            .unwrap()
-                                            .emailer {
-                                                emailer.email(
-                                                    format!("{} {}", prefix, subject.clone()),
-                                                    body.clone(),
-                                                )
-                                                    .map_err(|_| ())
-                                                    .unwrap();
-                                            } else {
-                                                log::error!("Email was not configured");
-                                            }
+                                        this.ports.send_email(
+                                                format!("{} {}", prefix, subject.clone()),
+                                                body.clone(),
+                                            )
+                                            .map_err(|_| ())
+                                            .unwrap();
                                     }
                                 }
                             }
-                            broadcast.write().unwrap().alerts.insert(
+                            this.alerts.insert(
                                 message_type,
                                 alert_config.clone(),
                             );
-                            broadcast.write().unwrap().last_alerted.insert(
+                            this.last_alerted.insert(
                                 message_id,
                                 Instant::now()
                             );
                         }
                         _ => {
-                            log::debug!("Not alerting: {:?}. Alerts map entry: {:?}", message.event_type(), alerts_map.get(&message_type));
-                            ()
+                            log::debug!(
+                                "Not alerting: {:?}. Alerts map entry: {:?}",
+                                message.event_type(), alerts_map.get(&message_type)
+                            );
                         },
                     }
                 }
@@ -145,78 +159,50 @@ impl Actor for Broadcast {
 pub mod test {
     use super::*;
     use crate::{
-        config::{AlertType, Config},
-        error::Result,
+        config::AlertType, error::Result,
         services::messages::BroadcastEventType,
     };
     use std::{
-        result,
-        sync::{Mutex, MutexGuard, PoisonError},
+        sync::{Arc, Mutex},
         thread,
     };
 
-    lazy_static! {
-        static ref LOCK: Mutex<()> = Mutex::new(());
+    struct TestBroadcastPorts {
+        sent_emails: Vec<(String, String)>,
+        events_buffer: Vec<BroadcastEvent>,
     }
-
-    pub fn lock_outbox<'a>(
-    ) -> result::Result<MutexGuard<'a, ()>, PoisonError<MutexGuard<'a, ()>>>
-    {
-        LOCK.lock()
-    }
-
-    // run the given block with exclusive access to the OUTBOX
-    #[macro_export]
-    macro_rules! run_with_outbox {
-        ($test_block:expr) => {{
-            use crate::services::broadcast::test;
-            let _lock = test::lock_outbox();
-
-            $test_block
-        }};
-    }
-
-    struct TestEmailer {
-        sent_emails: Arc<Mutex<Vec<(String, String)>>>,
-    }
-    impl TestEmailer {
-        pub fn new() -> Box<dyn SendEmail>
-        where
-            Self: SendEmail,
-        {
-            Box::new(Self {
-                sent_emails: Arc::new(Mutex::new(vec![])),
-            })
+    impl TestBroadcastPorts {
+        pub fn new(events_buffer: Vec<BroadcastEvent>) -> Self {
+            Self {
+                sent_emails: vec![],
+                events_buffer,
+            }
         }
     }
-    impl SendEmail for TestEmailer {
-        fn email(&self, subject: String, body: String) -> Result<()> {
-            self.sent_emails.lock().unwrap().push((subject, body));
+    impl BroadcastPorts for Arc<Mutex<TestBroadcastPorts>> {
+        fn send_email(&self, subject: String, body: String) -> Result<()> {
+            self.lock().unwrap().sent_emails.push((subject, body));
             Ok(())
+        }
+
+        fn get_next_event(&self) -> Option<BroadcastEvent> {
+            self.lock().unwrap().events_buffer.pop()
         }
     }
 
     #[test]
     fn broadcast_sends_an_email() {
-        let mut config = Config::default();
-        config.broadcast.alerts.push(AlertConfig {
-            alert_interval: Some(Duration::from_millis(100)),
-            event: BroadcastEventType::HighDiskUsage,
-            mediums: vec![BroadcastMedium::Email],
-            alert_type: AlertType::Alarm,
-        });
-
-        let system = System::new("test");
-
-        let emailer = TestEmailer::new();
-
-        let sent_emails =
-            &emailer.downcast_ref::<TestEmailer>().unwrap().sent_emails;
-        let sent_emails = Arc::clone(sent_emails);
-
-        run_with_config!(config, {
-            Broadcast::new().with_emailer(emailer).start();
-        });
+        let alerts: HashMap<BroadcastEventType, AlertConfig> = vec![(
+            BroadcastEventType::HighDiskUsage,
+            AlertConfig {
+                alert_interval: Some(Duration::from_millis(100)),
+                event: BroadcastEventType::HighDiskUsage,
+                mediums: vec![BroadcastMedium::Email],
+                alert_type: AlertType::Alarm,
+            },
+        )]
+        .into_iter()
+        .collect();
 
         let event = BroadcastEvent::HighDiskUsage {
             filesystem_mount: "/".to_string(),
@@ -224,45 +210,36 @@ pub mod test {
             max_usage: 50.00,
         };
 
-        run_with_outbox!({
-            OUTBOX.push(event).unwrap();
+        let system = System::new("test");
 
-            let current = System::current();
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(
-                    50 + BROADCAST_TICK_INTERVAL,
-                ));
+        let ports = Arc::new(Mutex::new(TestBroadcastPorts::new(vec![event])));
 
-                assert_eq!(sent_emails.lock().unwrap().len(), 1);
+        Broadcast::test(alerts, Box::new(Arc::clone(&ports))).start();
 
-                current.stop()
-            });
-
-            system.run();
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50 + BROADCAST_TICK_INTERVAL));
+            current.stop()
         });
+
+        system.run().unwrap();
+
+        assert_eq!(ports.lock().unwrap().sent_emails.len(), 1);
     }
 
     #[test]
     fn broadcast_sends_multiple_emails() {
-        let mut config = Config::default();
-        config.broadcast.alerts.push(AlertConfig {
-            alert_interval: Some(Duration::from_millis(100)),
-            event: BroadcastEventType::HighDiskUsage,
-            mediums: vec![BroadcastMedium::Email],
-            alert_type: AlertType::Alarm,
-        });
-
-        let system = System::new("test");
-
-        let emailer = TestEmailer::new();
-
-        let sent_emails =
-            &emailer.downcast_ref::<TestEmailer>().unwrap().sent_emails;
-        let sent_emails = Arc::clone(sent_emails);
-
-        run_with_config!(config, {
-            Broadcast::new().with_emailer(emailer).start();
-        });
+        let alerts: HashMap<BroadcastEventType, AlertConfig> = vec![(
+            BroadcastEventType::HighDiskUsage,
+            AlertConfig {
+                alert_interval: Some(Duration::from_millis(100)),
+                event: BroadcastEventType::HighDiskUsage,
+                mediums: vec![BroadcastMedium::Email],
+                alert_type: AlertType::Alarm,
+            },
+        )]
+        .into_iter()
+        .collect();
 
         let events = vec![
             BroadcastEvent::HighDiskUsage {
@@ -277,79 +254,72 @@ pub mod test {
             },
         ];
 
-        run_with_outbox!({
-            for event in events {
-                OUTBOX.push(event).unwrap();
-            }
+        let system = System::new("test");
 
-            let current = System::current();
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(
-                    50 + BROADCAST_TICK_INTERVAL,
-                ));
+        let ports = Arc::new(Mutex::new(TestBroadcastPorts::new(events)));
 
-                assert_eq!(sent_emails.lock().unwrap().len(), 2);
+        Broadcast::test(alerts, Box::new(Arc::clone(&ports))).start();
 
-                current.stop()
-            });
-
-            system.run();
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50 + BROADCAST_TICK_INTERVAL));
+            current.stop()
         });
+
+        system.run().unwrap();
+        assert_eq!(ports.lock().unwrap().sent_emails.len(), 2);
     }
 
     #[test]
     fn broadcast_ignores_alerts_if_an_alert_was_just_sent() {
-        let mut config = Config::default();
-        config.broadcast.alerts.push(AlertConfig {
-            alert_interval: Some(Duration::from_millis(100)),
-            event: BroadcastEventType::HighDiskUsage,
-            mediums: vec![BroadcastMedium::Email],
-            alert_type: AlertType::Alarm,
-        });
+        let alerts: HashMap<BroadcastEventType, AlertConfig> = vec![(
+            BroadcastEventType::HighDiskUsage,
+            AlertConfig {
+                alert_interval: Some(Duration::from_millis(100)),
+                event: BroadcastEventType::HighDiskUsage,
+                mediums: vec![BroadcastMedium::Email],
+                alert_type: AlertType::Alarm,
+            },
+        )]
+        .into_iter()
+        .collect();
 
-        let system = System::new("test");
-
-        let emailer = TestEmailer::new();
-
-        let sent_emails =
-            &emailer.downcast_ref::<TestEmailer>().unwrap().sent_emails;
-        let sent_emails = Arc::clone(sent_emails);
-
-        run_with_config!(config, {
-            Broadcast::new().with_emailer(emailer).start();
-        });
-
+        // simulate 10 identical events in a row
         let event = BroadcastEvent::HighDiskUsage {
             filesystem_mount: "/".to_string(),
             current_usage: 100.00,
             max_usage: 50.00,
         };
+        let mut events: Vec<BroadcastEvent> = vec![];
+        for _ in 1..10 {
+            events.push(event.clone());
+        }
 
-        run_with_outbox!({
-            // push 10 events in a row, only one of these should get
-            // alerted on.
-            for _ in 1..10 {
-                OUTBOX.push(event.clone()).unwrap();
-            }
+        let system = System::new("test");
 
-            let current = System::current();
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(
-                    50 + BROADCAST_TICK_INTERVAL,
-                ));
+        let ports = Arc::new(Mutex::new(TestBroadcastPorts::new(events)));
+        let ports_clone = Arc::clone(&ports);
 
-                // push another one, this one should get alerted on
-                // now that we're past the alert interval
-                OUTBOX.push(event.clone()).unwrap();
+        Broadcast::test(alerts, Box::new(Arc::clone(&ports))).start();
 
-                thread::sleep(Duration::from_millis(BROADCAST_TICK_INTERVAL));
+        let current = System::current();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50 + BROADCAST_TICK_INTERVAL));
 
-                assert_eq!(sent_emails.lock().unwrap().len(), 2);
+            // push another one, this one should get alerted on
+            // now that we're past the alert interval
+            ports_clone
+                .lock()
+                .unwrap()
+                .events_buffer
+                .push(event.clone());
 
-                current.stop()
-            });
-
-            system.run();
+            thread::sleep(Duration::from_millis(BROADCAST_TICK_INTERVAL));
+            current.stop()
         });
+
+        system.run().unwrap();
+
+        assert_eq!(ports.lock().unwrap().sent_emails.len(), 2);
     }
 }

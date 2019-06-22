@@ -31,13 +31,8 @@ pub fn initialize_postgres() -> Result<()> {
     Ok(())
 }
 
-pub fn initialize_from(db: Database) -> () {
+pub fn initialize_from(db: Database) {
     *DATABASE.lock().unwrap() = Some(db)
-}
-
-#[cfg(test)]
-pub fn unset() -> () {
-    *DATABASE.lock().unwrap() = None
 }
 
 #[derive(Clone)]
@@ -110,113 +105,5 @@ impl DatabaseInner for PostgresDatabase {
             .values(&disk_usage)
             .get_result(&self.connection)
             .map_err(Into::into)
-    }
-}
-
-#[macro_use]
-#[cfg(test)]
-pub mod test {
-    use diesel::pg::data_types::PgTimestamp;
-    use lazy_static::lazy_static;
-    use std::{
-        result::Result as StdResult,
-        sync::{Arc, Mutex, MutexGuard, PoisonError},
-    };
-
-    use crate::{
-        db::{models, DatabaseInner},
-        Result,
-    };
-
-    lazy_static! {
-        static ref LOCK: Mutex<()> = Mutex::new(());
-    }
-
-    pub fn lock_database<'a>(
-    ) -> StdResult<MutexGuard<'a, ()>, PoisonError<MutexGuard<'a, ()>>> {
-        LOCK.lock()
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct TestDatabaseState {
-        pub tasks: Vec<models::Task>,
-        pub disk_usage: Vec<models::DiskUsage>,
-    }
-
-    impl TestDatabaseState {
-        pub fn new() -> Self {
-            Self {
-                tasks: vec![],
-                disk_usage: vec![],
-            }
-        }
-    }
-
-    pub struct TestDatabase {
-        state: Arc<Mutex<TestDatabaseState>>,
-    }
-
-    impl TestDatabase {
-        pub fn new(state: Arc<Mutex<TestDatabaseState>>) -> Self {
-            Self { state }
-        }
-    }
-
-    impl DatabaseInner for TestDatabase {
-        fn insert_task(&self, task: models::NewTask) -> Result<models::Task> {
-            let task = models::Task {
-                id: 0,
-                task: task.task,
-                sent_at: PgTimestamp(0),
-            };
-
-            let mut state = self.state.lock().unwrap();
-            state.tasks.push(task.clone());
-            Ok(task)
-        }
-
-        fn insert_disk_usage(
-            &self,
-            disk_usage: models::NewDiskUsage,
-        ) -> Result<models::DiskUsage> {
-            let disk_usage = models::DiskUsage {
-                id: 0,
-                mount: disk_usage.mount,
-                percent_disk_used: disk_usage.percent_disk_used,
-                recorded_at: PgTimestamp(0),
-            };
-
-            let mut state = self.state.lock().unwrap();
-            state.disk_usage.push(disk_usage.clone());
-            Ok(disk_usage)
-        }
-    }
-
-    // run the given block with a TestDatabase instance initialized
-    // into the global database object, ensuring that no other threads
-    // modify the database during execution. return the database state
-    // after run.
-    #[macro_export]
-    macro_rules! run_with_db {
-        ($system:expr) => {{
-            use std::sync::{Arc, Mutex};
-
-            use crate::db::{self, test};
-
-            let _lock = test::lock_database();
-
-            let state = Arc::new(Mutex::new(test::TestDatabaseState::new()));
-            db::initialize_from(db::Database::new(test::TestDatabase::new(
-                Arc::clone(&state),
-            )));
-
-            $system.run().unwrap();
-
-            // unset the database in order to access the underlying state
-            db::unset();
-            let mutex = Arc::try_unwrap(state).ok().unwrap();
-            let result = mutex.lock().unwrap().clone();
-            result
-        }};
     }
 }

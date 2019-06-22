@@ -51,7 +51,7 @@ pub fn initialize_from_file() -> Result<()> {
     Ok(())
 }
 
-pub fn initialize_from<'a>(config: Config) -> () {
+pub fn initialize_from(config: Config) {
     *CONFIG.lock().unwrap() = Some(config);
 }
 
@@ -78,6 +78,7 @@ pub struct FilesystemConfig {
 #[derive(Clone, Deserialize, Debug)]
 pub struct SystemMonitorConfig {
     pub filesystems: Vec<FilesystemConfig>,
+    pub tick_ms: u64,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -169,36 +170,5 @@ impl Default for Config {
                 password: "postgres".to_string(),
             },
         }
-    }
-}
-
-#[macro_use]
-#[cfg(test)]
-pub mod test {
-    use lazy_static::lazy_static;
-    use std::sync::{Mutex, MutexGuard, PoisonError};
-
-    lazy_static! {
-        static ref LOCK: Mutex<()> = Mutex::new(());
-    }
-
-    pub fn lock_config<'a>(
-    ) -> Result<MutexGuard<'a, ()>, PoisonError<MutexGuard<'a, ()>>> {
-        LOCK.lock()
-    }
-
-    // run the given block with the given config initialized into the
-    // global config object, ensuring that no other threads modify the
-    // config during execution
-    #[macro_export]
-    macro_rules! run_with_config {
-        ($config:expr, $test_block:expr) => {{
-            use crate::config::{self, test};
-
-            let _lock = test::lock_config();
-            config::initialize_from($config);
-
-            $test_block
-        }};
     }
 }

@@ -45,7 +45,7 @@ impl News {
                 let new_york_times =
                     NewYorkTimes::new(nyt_config.api_key.clone());
 
-                let viewed = nyt_config.most_popular_viewed_period.iter().map(
+                nyt_config.most_popular_viewed_period.iter().map(
                     move |period| {
                         new_york_times
                             .most_popular_viewed(period.clone())
@@ -73,9 +73,7 @@ impl News {
                             })
                             .map_err(Into::into)
                     },
-                );
-
-                viewed
+                )
             })
             .collect()
     }
@@ -105,7 +103,6 @@ impl Handler<ScheduledTaskMessage> for News {
     ) -> Self::Result {
         match msg {
             ScheduledTaskMessage::FetchNews => self.build_newscast(),
-            _ => Ok(()),
         }
     }
 }

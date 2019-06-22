@@ -3,7 +3,18 @@ use actix::prelude::*;
 use super::messages::ScheduledTaskMessage;
 use crate::config::{config, ScheduledTaskConfig};
 use crate::db::{database, models};
-use crate::error::Error;
+use crate::error::{Error, Result};
+
+trait SchedulerPorts {
+    fn insert_task(&self, task: models::NewTask) -> Result<()>;
+}
+
+struct LiveSchedulerPorts;
+impl SchedulerPorts for LiveSchedulerPorts {
+    fn insert_task(&self, task: models::NewTask) -> Result<()> {
+        database().insert_task(task).map(|_| ())
+    }
+}
 
 /// The scheduler is responsible for kicking off configured tasks at
 /// the correct times by sending messages to other services that
@@ -11,12 +22,26 @@ use crate::error::Error;
 pub struct Scheduler {
     tasks: Vec<ScheduledTaskConfig>,
     task_runners: Vec<Recipient<ScheduledTaskMessage>>,
+    ports: Box<SchedulerPorts>,
 }
 impl Scheduler {
     pub fn new() -> Self {
         Self {
             tasks: config().tasks,
             task_runners: vec![],
+            ports: Box::new(LiveSchedulerPorts),
+        }
+    }
+
+    #[cfg(test)]
+    fn test(
+        tasks: Vec<ScheduledTaskConfig>,
+        test_ports: Box<SchedulerPorts>,
+    ) -> Self {
+        Self {
+            tasks,
+            task_runners: vec![],
+            ports: test_ports,
         }
     }
 
@@ -32,13 +57,11 @@ impl Scheduler {
         &self,
         ctx: &mut Context<Self>,
         task: ScheduledTaskConfig,
-    ) -> () {
+    ) {
         // record this message in the db
         serde_json::to_string(&task.message)
             .map_err(Into::into)
-            .and_then(|t| {
-                database().insert_task(models::NewTask::new(t)).map(|_| ())
-            })
+            .and_then(|t| self.ports.insert_task(models::NewTask::new(t)))
             .unwrap_or_else(|e| eprintln!("{}", Into::<Error>::into(e)));
 
         // send this message to configured task_runners
@@ -80,10 +103,7 @@ mod test {
         thread, time,
     };
 
-    use crate::{
-        config::{Config, ScheduledTaskConfig},
-        error::Result,
-    };
+    use crate::{config::ScheduledTaskConfig, error::Result};
 
     struct TestActor {
         pub messages_recieved: Arc<Mutex<Vec<ScheduledTaskMessage>>>,
@@ -105,14 +125,25 @@ mod test {
         }
     }
 
+    struct TestSchedulerPorts {
+        inserted_tasks: Vec<models::NewTask>,
+    }
+    impl TestSchedulerPorts {
+        pub fn new() -> Self {
+            Self {
+                inserted_tasks: vec![],
+            }
+        }
+    }
+    impl SchedulerPorts for Arc<Mutex<TestSchedulerPorts>> {
+        fn insert_task(&self, task: models::NewTask) -> Result<()> {
+            self.lock().unwrap().inserted_tasks.push(task);
+            Ok(())
+        }
+    }
+
     #[test]
     fn scheduler_sends_messages_to_configured_service_on_cron_schedule() {
-        let mut test_config = Config::default();
-        test_config.tasks.push(ScheduledTaskConfig {
-            cron: "* * * * * * *".to_string(),
-            message: ScheduledTaskMessage::FetchNews,
-        });
-
         let system = System::new("test");
 
         let messages_received: Arc<Mutex<Vec<ScheduledTaskMessage>>> =
@@ -124,19 +155,25 @@ mod test {
         let addr = test_actor.start();
         let recipient = Addr::recipient(addr);
 
-        run_with_config!(test_config, {
-            let mut scheduler = Scheduler::new();
-            scheduler.add_task_runner(recipient);
-            scheduler.start();
-        });
+        let ports = Arc::new(Mutex::new(TestSchedulerPorts::new()));
+
+        let mut scheduler = Scheduler::test(
+            vec![ScheduledTaskConfig {
+                cron: "* * * * * * *".to_string(),
+                message: ScheduledTaskMessage::FetchNews,
+            }],
+            Box::new(Arc::clone(&ports)),
+        );
+        scheduler.add_task_runner(recipient);
+        scheduler.start();
 
         let current = System::current();
         thread::spawn(move || {
-            thread::sleep(time::Duration::from_millis(5000));
+            thread::sleep(time::Duration::from_millis(2500));
 
             let messages = messages_received.lock().unwrap().clone();
 
-            assert!(messages.len() > 1);
+            assert!(messages.len() >= 2);
             assert!(messages
                 .into_iter()
                 .all(|msg| msg == ScheduledTaskMessage::FetchNews));
@@ -144,18 +181,12 @@ mod test {
             current.stop();
         });
 
-        let state = run_with_db!(system);
-        assert!(state.tasks.len() > 1);
+        system.run().unwrap();
+        assert!(ports.lock().unwrap().inserted_tasks.len() > 1);
     }
 
     #[test]
     fn scheduler_doesnt_send_to_unconfigured_service() {
-        let mut test_config = Config::default();
-        test_config.tasks.push(ScheduledTaskConfig {
-            cron: "* * * * * * *".to_string(),
-            message: ScheduledTaskMessage::FetchNews,
-        });
-
         let system = System::new("test");
 
         let messages_received: Arc<Mutex<Vec<ScheduledTaskMessage>>> =
@@ -166,9 +197,14 @@ mod test {
         }
         .start();
 
-        run_with_config!(test_config, {
-            Scheduler::new().start();
-        });
+        Scheduler::test(
+            vec![ScheduledTaskConfig {
+                cron: "* * * * * * *".to_string(),
+                message: ScheduledTaskMessage::FetchNews,
+            }],
+            Box::new(Arc::new(Mutex::new(TestSchedulerPorts::new()))),
+        )
+        .start();
 
         let current = System::current();
         thread::spawn(move || {
@@ -177,6 +213,6 @@ mod test {
             current.stop();
         });
 
-        run_with_db!(system);
+        system.run().unwrap();
     }
 }
