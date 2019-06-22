@@ -15,8 +15,9 @@ mod routes;
 #[macro_use]
 extern crate diesel;
 
-use actix::prelude::*;
-use actix_web::{web, App, HttpServer};
+use actix::{Actor, Addr};
+use actix_files::Files;
+use actix_web::{middleware, App, HttpServer};
 
 use crate::{
     error::Result,
@@ -33,27 +34,22 @@ fn main() -> Result<()> {
     db::initialize_postgres()?;
     log::info!("Database connection initialized");
 
-    let system = System::new("pulse");
-
-    Broadcast::new().start();
-
-    let monitor_addr = SystemMonitor::new().start();
-    let news_addr = News::new().start();
-
-    let mut scheduler = Scheduler::new();
-    scheduler.add_task_runner(Addr::recipient(news_addr));
-    scheduler.start();
-    log::info!("Scheduler started");
-
-    // start web server
     HttpServer::new(|| {
-        App::new().service(web::resource("/").to(routes::index))
+        Broadcast::new().start();
+        SystemMonitor::new().start();
+
+        let news_addr = News::new().start();
+        let mut scheduler = Scheduler::new();
+        scheduler.add_task_runner(Addr::recipient(news_addr));
+        scheduler.start();
+        log::info!("Scheduler started");
+
+        App::new().wrap(middleware::Logger::default()).service(
+            Files::new("/", "./webapp/public/").index_file("index.html"),
+        )
     })
     .bind("127.0.0.1:8088")?
     .run()?;
-    log::info!("Web server running at localhost:8088");
-
-    system.run()?;
 
     Ok(())
 }

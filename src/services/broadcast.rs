@@ -9,8 +9,6 @@ use std::{
 use actix::prelude::*;
 use crossbeam::queue::ArrayQueue;
 use lazy_static::lazy_static;
-use log::error;
-use log::{debug, info};
 
 use crate::config::{config, AlertConfig, AlertType};
 use crate::services::broadcast::email::{Emailer, SendEmail};
@@ -73,7 +71,7 @@ impl Actor for Broadcast {
             Duration::from_millis(BROADCAST_TICK_INTERVAL),
             move |_, _| {
                 while let Ok(message) = OUTBOX.pop() {
-                    debug!("Broadcast received message: {:?}", message.event_type());
+                    log::debug!("Broadcast received message: {:?}", message.event_type());
 
                     let alerts_map = broadcast.read().unwrap().alerts.clone();
                     let last_alerted_map = broadcast.read().unwrap().last_alerted.clone();
@@ -95,7 +93,7 @@ impl Actor for Broadcast {
                                 })
                                 .unwrap_or(true) =>
                         {
-                            info!("Sending alert for : {:?}", message);
+                            log::debug!("Sending alert for : {:?}", message);
                             let prefix = if last_alerted.is_none() || alert_config.alert_type == AlertType::Digest {
                                 "[PULSE]"
                             } else {
@@ -107,7 +105,7 @@ impl Actor for Broadcast {
                                 match medium {
                                     BroadcastMedium::Email => {
                                         if let Some(ref emailer) = broadcast
-                                            .read()
+                                            .read() 
                                             .unwrap()
                                             .emailer {
                                                 emailer.email(
@@ -117,7 +115,7 @@ impl Actor for Broadcast {
                                                     .map_err(|_| ())
                                                     .unwrap();
                                             } else {
-                                                error!("Email was not configured");
+                                                log::error!("Email was not configured");
                                             }
                                     }
                                 }
@@ -132,7 +130,7 @@ impl Actor for Broadcast {
                             );
                         }
                         _ => {
-                            debug!("Not alerting: {:?}. Alerts map entry: {:?}", message.event_type(), alerts_map.get(&message_type));
+                            log::debug!("Not alerting: {:?}. Alerts map entry: {:?}", message.event_type(), alerts_map.get(&message_type));
                             ()
                         },
                     }
