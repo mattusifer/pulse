@@ -1,4 +1,7 @@
-use diesel::{data_types::*, Insertable, Queryable};
+use actix::Message;
+use chrono::NaiveDateTime;
+use diesel::{Insertable, Queryable};
+use serde::{Deserialize, Serialize};
 
 use crate::schema::{disk_usage, tasks};
 
@@ -6,7 +9,7 @@ use crate::schema::{disk_usage, tasks};
 pub struct Task {
     pub id: i32,
     pub task: String,
-    pub sent_at: PgTimestamp,
+    pub sent_at: NaiveDateTime,
 }
 
 #[derive(Insertable)]
@@ -21,15 +24,22 @@ impl NewTask {
     }
 }
 
-#[derive(Queryable, Clone, Debug)]
+#[derive(Queryable, Clone, Debug, Message, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct DiskUsage {
     pub id: i32,
     pub mount: String,
     pub percent_disk_used: f64,
-    pub recorded_at: PgTimestamp,
+    pub recorded_at: NaiveDateTime,
 }
 
-#[derive(Insertable, Clone)]
+impl Into<String> for DiskUsage {
+    fn into(self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+#[derive(Debug, Insertable, Clone)]
 #[table_name = "disk_usage"]
 pub struct NewDiskUsage {
     pub mount: String,

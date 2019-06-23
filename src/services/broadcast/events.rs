@@ -1,26 +1,6 @@
-use actix::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::news;
-use crate::error::Result;
-
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum ScheduledStreamMessage {
-    CheckDiskUsage,
-}
-impl Message for ScheduledStreamMessage {
-    type Result = Result<()>;
-}
-
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum ScheduledTaskMessage {
-    FetchNews,
-}
-impl Message for ScheduledTaskMessage {
-    type Result = Result<()>;
-}
+use crate::services::news;
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
 pub struct BroadcastEventKey(String);
@@ -78,7 +58,7 @@ impl BroadcastEvent {
                                 .map(|article| {
                                     format!(
                                         include_str!(
-                                            "../../resources/email/news/article.html"),
+                                            "../../../resources/email/news/article.html"),
                                             url = article.url,
                                             title = article.title,
                                             publish_date = article.published_date,
@@ -89,7 +69,7 @@ impl BroadcastEvent {
                                 .join("<br>");
 
                             format!(
-                                include_str!("../../resources/email/news/section.html"),
+                                include_str!("../../../resources/email/news/section.html"),
                                 section_title = section.section_title,
                                 articles = articles
                             )
@@ -98,11 +78,13 @@ impl BroadcastEvent {
                         .join("<br>");
 
                     format!(
-                        include_str!("../../resources/email/news/outline.html"),
+                        include_str!(
+                            "../../../resources/email/news/outline.html"
+                        ),
                         title = "Digest",
                         sections = sections,
                         css = include_str!(
-                            "../../resources/email/news/style.css"
+                            "../../../resources/email/news/style.css"
                         )
                     )
                 })

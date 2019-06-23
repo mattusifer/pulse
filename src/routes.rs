@@ -1,5 +1,3 @@
-use actix_web::Responder;
+mod ws;
 
-pub fn index() -> impl Responder {
-    "Hello world!"
-}
+pub use ws::Ws;

@@ -9,11 +9,13 @@ use lazy_static::lazy_static;
 use nytrs::request::{MostPopularPeriod, ShareType};
 use serde::Deserialize;
 
-use crate::constants;
-use crate::error::Result;
-use crate::services::messages::{
-    BroadcastEventType, BroadcastMedium, ScheduledStreamMessage,
-    ScheduledTaskMessage,
+use crate::{
+    constants,
+    error::Result,
+    services::{
+        broadcast::{BroadcastEventType, BroadcastMedium},
+        scheduler::{ScheduledStreamMessage, ScheduledTaskMessage},
+    },
 };
 
 lazy_static! {

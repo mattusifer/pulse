@@ -2,8 +2,6 @@ use std::{fmt, io, path::PathBuf, result};
 
 use failure::{Backtrace, Context, Fail};
 
-use crate::services::messages::ScheduledStreamMessage;
-
 pub type Result<T> = result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -12,10 +10,10 @@ pub struct Error {
 }
 
 impl Error {
-    /// Return the kind of this error.
-    pub fn kind(&self) -> &ErrorKind {
-        self.ctx.get_context()
-    }
+    // /// Return the kind of this error.
+    // pub fn kind(&self) -> &ErrorKind {
+    //     self.ctx.get_context()
+    // }
 
     pub fn invalid_unicode_path(path: PathBuf) -> Self {
         ErrorKind::InvalidUnicodePath { path }.into()
@@ -23,17 +21,6 @@ impl Error {
 
     pub fn unconfigured_email() -> Self {
         ErrorKind::UnconfiguredEmail.into()
-    }
-
-    pub fn unsupported_stream_message<S: Into<String>>(
-        actor: S,
-        message: ScheduledStreamMessage,
-    ) -> Self {
-        ErrorKind::UnsupportedStreamMessage {
-            actor: actor.into(),
-            message,
-        }
-        .into()
     }
 }
 
@@ -60,15 +47,6 @@ pub enum ErrorKind {
 
     #[fail(display = "email is not configured")]
     UnconfiguredEmail,
-
-    #[fail(
-        display = "actor {} received unsupported message {:?}",
-        actor, message
-    )]
-    UnsupportedStreamMessage {
-        actor: String,
-        message: ScheduledStreamMessage,
-    },
 
     #[fail(display = "error sending email: {}", error)]
     EmailError { error: String },

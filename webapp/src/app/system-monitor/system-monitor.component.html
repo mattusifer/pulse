@@ -1,0 +1,6 @@
+<div>
+  <div *ngFor="let mount of mounts">
+    <h3>Mount: {{ mount }}</h3>
+    <div [id]="'disk-usage-' + mount"></div>
+  </div>
+</div>

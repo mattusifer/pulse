@@ -1,4 +1,6 @@
 mod email;
+mod events;
+pub use events::*;
 
 use std::{
     collections::HashMap,
@@ -13,9 +15,6 @@ use lazy_static::lazy_static;
 use crate::{
     config::{config, AlertConfig, AlertType, EmailConfig},
     error::{Error, Result},
-    services::messages::{
-        BroadcastEvent, BroadcastEventKey, BroadcastEventType, BroadcastMedium,
-    },
 };
 
 type LastAlerted = HashMap<BroadcastEventKey, Instant>;
@@ -163,7 +162,7 @@ pub mod test {
     use super::*;
     use crate::{
         config::AlertType, error::Result,
-        services::messages::BroadcastEventType,
+        services::broadcast::events::BroadcastEventType,
     };
     use std::{
         sync::{Arc, Mutex},
@@ -197,14 +196,6 @@ pub mod test {
             events_buffer: Arc<Mutex<Vec<BroadcastEvent>>>,
         ) -> Self {
             self.events_buffer = events_buffer;
-            self
-        }
-
-        pub fn with_last_alerted(
-            mut self,
-            last_alerted: Arc<Mutex<LastAlerted>>,
-        ) -> Self {
-            self.last_alerted = last_alerted;
             self
         }
     }

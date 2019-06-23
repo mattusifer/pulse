@@ -1,12 +1,7 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
-use actix::prelude::*;
+use actix::{Actor, AsyncContext, Context, Handler, Message, Recipient};
 use systemstat::{Filesystem, Platform, System as LocalSystem};
-
-use super::{
-    broadcast::OUTBOX,
-    messages::{BroadcastEvent, ScheduledStreamMessage},
-};
 
 use crate::{
     config::{
@@ -14,6 +9,10 @@ use crate::{
     },
     db::{database, models},
     error::{Error, Result},
+    services::{
+        broadcast::{BroadcastEvent, OUTBOX},
+        scheduler::ScheduledStreamMessage,
+    },
 };
 
 trait SystemMonitorPorts {
@@ -43,6 +42,7 @@ pub struct SystemMonitor {
     system: LocalSystem,
     config: SystemMonitorConfig,
     streams: Vec<ScheduledStreamConfig>,
+    subscribers: HashMap<usize, Subscriber>,
     ports: Box<SystemMonitorPorts>,
 }
 impl SystemMonitor {
@@ -51,6 +51,7 @@ impl SystemMonitor {
             system: LocalSystem::new(),
             config: config().system_monitor.unwrap(),
             streams: config().streams,
+            subscribers: HashMap::new(),
             ports: Box::new(LiveSystemMonitorPorts),
         }
     }
@@ -65,6 +66,7 @@ impl SystemMonitor {
             system: LocalSystem::new(),
             config,
             streams,
+            subscribers: HashMap::new(),
             ports,
         }
     }
@@ -72,6 +74,15 @@ impl SystemMonitor {
     /// Get the list of mounts from the config for this service
     fn filesystems(&self) -> &Vec<FilesystemConfig> {
         &self.config.filesystems
+    }
+
+    fn next_subscriber_id(&self) -> usize {
+        let id: usize = rand::random();
+        if self.subscribers.contains_key(&id) {
+            self.next_subscriber_id()
+        } else {
+            id
+        }
     }
 
     fn get_mount(
@@ -106,19 +117,36 @@ impl SystemMonitor {
                     as f64
                     / filesystem.total.as_u64() as f64)
                     * 100_f64;
+                let disk_usage = models::NewDiskUsage::new(
+                    filesystem.fs_mounted_on.clone(),
+                    disk_usage,
+                );
 
+                // record current usage in the database
                 self.ports
-                    .record_disk_usage(models::NewDiskUsage::new(
-                        filesystem.fs_mounted_on.clone(),
-                        disk_usage,
-                    ))
+                    .record_disk_usage(disk_usage.clone())
+                    .map(|disk_usage| (filesystem, disk_usage))
+            })
+            .and_then(|(filesystem, disk_usage)| {
+                // send filesystem updates to all subscribers
+                self.subscribers
+                    .values()
+                    .map(|subscriber| {
+                        subscriber
+                            .do_send(disk_usage.clone())
+                            .map_err(Into::into)
+                    })
+                    .collect::<Result<Vec<_>>>()
                     .map(|_| (filesystem, disk_usage))
             })
             .and_then(|(filesystem, disk_usage)| {
-                if disk_usage > filesystem_config.available_space_alert_above {
+                // if the current usage exceeds the threshold, send an alert
+                if disk_usage.percent_disk_used
+                    > filesystem_config.available_space_alert_above
+                {
                     let message = BroadcastEvent::HighDiskUsage {
                         filesystem_mount: filesystem.fs_mounted_on,
-                        current_usage: disk_usage,
+                        current_usage: disk_usage.percent_disk_used,
                         max_usage: filesystem_config
                             .available_space_alert_above,
                     };
@@ -152,19 +180,94 @@ impl Actor for SystemMonitor {
     }
 }
 
+/// Subscribe to system updates
+type Subscriber = Recipient<models::DiskUsage>;
+
+pub struct Subscribe(pub Subscriber);
+impl Message for Subscribe {
+    type Result = usize;
+}
+
+#[derive(Message)]
+pub struct Unsubscribe(pub usize);
+
+impl Handler<Subscribe> for SystemMonitor {
+    type Result = usize;
+
+    fn handle(
+        &mut self,
+        msg: Subscribe,
+        _: &mut Self::Context,
+    ) -> Self::Result {
+        let id = self.next_subscriber_id();
+        self.subscribers.insert(id, msg.0);
+        id
+    }
+}
+
+impl Handler<Unsubscribe> for SystemMonitor {
+    type Result = ();
+
+    fn handle(&mut self, msg: Unsubscribe, _: &mut Self::Context) {
+        self.subscribers.remove(&msg.0);
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::*;
-    use diesel::data_types::PgTimestamp;
     use std::{
         sync::{Arc, Mutex},
-        thread,
-        time::Duration,
+        time::{Duration, Instant},
     };
 
+    use actix::{Addr, System};
+    use diesel::data_types::PgTimestamp;
+    use futures::{future, Future};
+    use tokio_timer::Delay;
+
+    use super::*;
     use crate::{
-        config::FilesystemConfig, services::messages::BroadcastEventType,
+        config::FilesystemConfig, services::broadcast::BroadcastEventType,
     };
+
+    struct GetState;
+    impl Message for GetState {
+        type Result = String;
+    }
+
+    struct TestSubscriber {
+        updates: Vec<models::NewDiskUsage>,
+    }
+    impl TestSubscriber {
+        pub fn new() -> Self {
+            Self { updates: vec![] }
+        }
+    }
+    impl Actor for TestSubscriber {
+        type Context = Context<Self>;
+    }
+    impl Handler<models::NewDiskUsage> for TestSubscriber {
+        type Result = ();
+
+        fn handle(
+            &mut self,
+            update: models::NewDiskUsage,
+            _: &mut Self::Context,
+        ) {
+            self.updates.push(update)
+        }
+    }
+    impl Handler<GetState> for TestSubscriber {
+        type Result = String;
+
+        fn handle(
+            &mut self,
+            _: GetState,
+            _: &mut Self::Context,
+        ) -> Self::Result {
+            serde_json::to_string(&self.updates).unwrap()
+        }
+    }
 
     struct TestSystemMonitorPorts {
         recorded_disk_usage: Vec<models::NewDiskUsage>,
@@ -201,12 +304,9 @@ mod test {
         }
     }
 
-    #[test]
-    fn system_monitor_checks_disk_usage() {
-        let system = System::new("test");
-
-        let ports = Arc::new(Mutex::new(TestSystemMonitorPorts::new()));
-
+    fn test_monitor(
+        ports: Arc<Mutex<TestSystemMonitorPorts>>,
+    ) -> SystemMonitor {
         SystemMonitor::test(
             SystemMonitorConfig {
                 filesystems: vec![FilesystemConfig {
@@ -218,24 +318,80 @@ mod test {
             vec![ScheduledStreamConfig {
                 message: ScheduledStreamMessage::CheckDiskUsage,
             }],
-            Box::new(Arc::clone(&ports)),
+            Box::new(ports),
         )
-        .start();
+    }
 
-        let current = System::current();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(30));
-            current.stop()
-        });
+    #[test]
+    fn system_monitor_records_disk_usage() {
+        System::run(|| {
+            let ports = Arc::new(Mutex::new(TestSystemMonitorPorts::new()));
+            test_monitor(Arc::clone(&ports)).start();
 
-        system.run().unwrap();
+            actix_rt::spawn(futures::lazy(move || {
+                Delay::new(Instant::now() + Duration::from_millis(30)).then(
+                    move |_| {
+                        let ports = ports.lock().unwrap();
+                        assert!(ports.recorded_disk_usage.len() == 3);
 
-        let ports = ports.lock().unwrap();
-        assert!(ports.recorded_disk_usage.len() >= 2);
-        assert!(ports.sent_alerts.len() >= 2);
-        assert_eq!(
-            ports.sent_alerts[0].event_type(),
-            BroadcastEventType::HighDiskUsage
-        );
+                        System::current().stop();
+                        future::result(Ok(()))
+                    },
+                )
+            }))
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn system_monitor_sends_alerts() {
+        System::run(|| {
+            let ports = Arc::new(Mutex::new(TestSystemMonitorPorts::new()));
+            test_monitor(Arc::clone(&ports)).start();
+
+            actix_rt::spawn(futures::lazy(move || {
+                Delay::new(Instant::now() + Duration::from_millis(30)).then(
+                    move |_| {
+                        let ports = ports.lock().unwrap();
+                        assert!(ports.sent_alerts.len() == 3);
+                        assert_eq!(
+                            ports.sent_alerts[0].event_type(),
+                            BroadcastEventType::HighDiskUsage
+                        );
+
+                        System::current().stop();
+                        future::result(Ok(()))
+                    },
+                )
+            }))
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn system_monitor_sends_updates_to_subscribers() {
+        System::run(|| {
+            let monitor = test_monitor(Arc::new(Mutex::new(
+                TestSystemMonitorPorts::new(),
+            )))
+            .start();
+            let subscriber = TestSubscriber::new().start();
+
+            monitor.do_send(Subscribe(Addr::recipient(subscriber.clone())));
+
+            actix_rt::spawn(futures::lazy(move || {
+                Delay::new(Instant::now() + Duration::from_millis(30))
+                    .then(move |_| subscriber.send(GetState).map_err(|_| ()))
+                    .map(|msg| {
+                        let updates: Vec<models::NewDiskUsage> =
+                            serde_json::from_str(&msg).unwrap();
+                        println!("{:?}", updates);
+                        assert!(updates.len() == 3);
+
+                        System::current().stop();
+                    })
+            }))
+        })
+        .unwrap()
     }
 }

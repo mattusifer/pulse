@@ -1,9 +1,13 @@
+mod messages;
+pub use messages::*;
+
 use actix::prelude::*;
 
-use super::messages::ScheduledTaskMessage;
-use crate::config::{config, ScheduledTaskConfig};
-use crate::db::{database, models};
-use crate::error::{Error, Result};
+use crate::{
+    config::{config, ScheduledTaskConfig},
+    db::{database, models},
+    error::{Error, Result},
+};
 
 trait SchedulerPorts {
     fn insert_task(&self, task: models::NewTask) -> Result<()>;

@@ -2,13 +2,13 @@ use actix::prelude::*;
 use chrono::NaiveDate;
 use nytrs::NewYorkTimes;
 
-use super::{
-    broadcast::OUTBOX,
-    messages::{BroadcastEvent, ScheduledTaskMessage},
-};
 use crate::{
     config::{config, NewsConfig},
     error::Result,
+    services::{
+        broadcast::{BroadcastEvent, OUTBOX},
+        scheduler::ScheduledTaskMessage,
+    },
 };
 
 #[derive(Clone, Debug)]

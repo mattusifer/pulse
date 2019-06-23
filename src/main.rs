@@ -1,26 +1,26 @@
-#[macro_use]
 mod config;
 mod constants;
-#[macro_use]
 mod db;
 mod error;
-#[macro_use]
-mod schema;
-#[macro_use]
-mod services;
 mod routes;
+mod schema;
+mod services;
 
 // TODO: remove this when diesel is updated for rust 2018:
 // https://github.com/diesel-rs/diesel/pull/1956
 #[macro_use]
 extern crate diesel;
 
+use std::env;
+
 use actix::{Actor, Addr, System};
 use actix_files::Files;
-use actix_web::{middleware, App, HttpServer};
+use actix_web::{middleware, web, App, HttpServer};
+use actix_web_actors::ws;
 
 use crate::{
     error::Result,
+    routes::Ws,
     services::{
         broadcast::Broadcast, news::News, scheduler::Scheduler,
         system::SystemMonitor,
@@ -28,6 +28,7 @@ use crate::{
 };
 
 fn main() -> Result<()> {
+    env::set_var("RUST_LOG", "actix_server=info,actix_web=info,pulse=info");
     pretty_env_logger::init();
 
     config::initialize_from_file()?;
@@ -36,10 +37,10 @@ fn main() -> Result<()> {
 
     let system = System::new("pulse");
 
-    if let Some(broadcast) = Broadcast::new()? {
-        broadcast.start();
-    }
-    SystemMonitor::new().start();
+    // Only start broadcast if alerts have been configured
+    // (it will be defined otherwise)
+    Broadcast::new()?.map(|b| b.start());
+    let monitor = SystemMonitor::new().start();
 
     let news_addr = News::new().start();
     let mut scheduler = Scheduler::new();
@@ -47,10 +48,21 @@ fn main() -> Result<()> {
     scheduler.start();
     log::info!("Scheduler started");
 
-    HttpServer::new(|| {
-        App::new().wrap(middleware::Logger::default()).service(
-            Files::new("/", "./webapp/public/").index_file("index.html"),
-        )
+    HttpServer::new(move || {
+        let monitor = monitor.clone();
+
+        App::new()
+            .wrap(middleware::Logger::default())
+            // websocket
+            .service(web::resource("/ws").route(web::get().to(
+                move |request, stream: web::Payload| {
+                    ws::start(Ws::new(monitor.clone()), &request, stream)
+                },
+            )))
+        // // index
+        // .service(
+        //     Files::new("/", "./webapp/public/").index_file("index.html"),
+        // )
     })
     .bind("127.0.0.1:8088")?
     .start();
