@@ -59,10 +59,11 @@ fn main() -> Result<()> {
                     ws::start(Ws::new(monitor.clone()), &request, stream)
                 },
             )))
-        // // index
-        // .service(
-        //     Files::new("/", "./webapp/public/").index_file("index.html"),
-        // )
+            // index
+            .service(
+                Files::new("/", "./webapp/dist/webapp/")
+                    .index_file("index.html"),
+            )
     })
     .bind("127.0.0.1:8088")?
     .start();

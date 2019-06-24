@@ -221,7 +221,6 @@ mod test {
     };
 
     use actix::{Addr, System};
-    use diesel::data_types::PgTimestamp;
     use futures::{future, Future};
     use tokio_timer::Delay;
 
@@ -236,7 +235,7 @@ mod test {
     }
 
     struct TestSubscriber {
-        updates: Vec<models::NewDiskUsage>,
+        updates: Vec<models::DiskUsage>,
     }
     impl TestSubscriber {
         pub fn new() -> Self {
@@ -246,14 +245,10 @@ mod test {
     impl Actor for TestSubscriber {
         type Context = Context<Self>;
     }
-    impl Handler<models::NewDiskUsage> for TestSubscriber {
+    impl Handler<models::DiskUsage> for TestSubscriber {
         type Result = ();
 
-        fn handle(
-            &mut self,
-            update: models::NewDiskUsage,
-            _: &mut Self::Context,
-        ) {
+        fn handle(&mut self, update: models::DiskUsage, _: &mut Self::Context) {
             self.updates.push(update)
         }
     }
@@ -294,7 +289,7 @@ mod test {
                 id: 0,
                 mount: disk_usage.mount,
                 percent_disk_used: disk_usage.percent_disk_used,
-                recorded_at: PgTimestamp(0),
+                recorded_at: chrono::NaiveDateTime::from_timestamp(0, 0),
             })
         }
 
@@ -383,7 +378,7 @@ mod test {
                 Delay::new(Instant::now() + Duration::from_millis(30))
                     .then(move |_| subscriber.send(GetState).map_err(|_| ()))
                     .map(|msg| {
-                        let updates: Vec<models::NewDiskUsage> =
+                        let updates: Vec<models::DiskUsage> =
                             serde_json::from_str(&msg).unwrap();
                         println!("{:?}", updates);
                         assert!(updates.len() == 3);

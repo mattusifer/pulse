@@ -1,8 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
 import { Message } from './model/message';
-import { SocketService } from './services/socket.service';
-import * as Plotly from 'plotly.js';
+import { Chart } from "chart.js";
 
 const WEBSOCKET_URL = 'ws://localhost:8088/ws';
 
@@ -14,22 +13,35 @@ const WEBSOCKET_URL = 'ws://localhost:8088/ws';
 export class SystemMonitorComponent implements OnInit {
     mounts: string[] = [];
     messages: Map<string, Message[]> = new Map();
-    plots: Plotly.ScatterLine;
     private socket;
 
     constructor() { }
 
     newPlot(mount: string) {
-        let x = this.messages.get(mount).map((x) => x.recordedAt.toString());
-        let y = this.messages.get(mount).map((x) => x.percentDiskUsed);
-        let data: Plotly.ScatterData[] = [
-            {
-                x: x,
-                y: y,
-                type: 'scatter'
+        let xs = this.messages.get(mount).map((x) => x.recordedAt);
+        let ys = this.messages.get(mount).map((x) => x.percentDiskUsed);
+
+        let canvas = <HTMLCanvasElement>document.getElementById("disk-usage-" + mount);
+        let ctx = canvas.getContext("2d");
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                datasets: [
+                    {
+                        label: "Disk Usage",
+                        backgroundColor: "#000000",
+                        data: xs.map((x, i) => { return { t: x, y: ys[i] } })
+                    }
+                ]
+            },
+            options: {
+                scales: {
+                    xAxes: [{
+                        type: 'time'
+                    }]
+                }
             }
-        ];
-        Plotly.newPlot('disk-usage-' + mount, data)
+        }).update({ duration: 0, lazy: false, easing: 'linear' });
     }
 
     ngOnInit() {
