@@ -1,16 +1,48 @@
 version: 2
 jobs:
-  build:
+  rust:
     docker:
       - image: rust:1.35-stretch
 
     steps:
       - checkout
 
+      - restore_cache:
+          key: pulse-rust-{{ .Branch }}-{{ checksum "Cargo.lock" }}
       - run:
           name: Build
           command: cargo build
+      - save_cache:
+          key: pulse-rust-{{ .Branch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - "target"
 
       - run:
           name: Test
           command: cargo test
+
+  webapp:
+    docker:
+      - image: circleci/node:12-browsers
+
+    steps:
+      - checkout
+
+      # build frontend and cache the result
+      - restore_cache:
+          key: pulse-webapp-{{ .Branch }}-{{ checksum "webapp/package-lock.json" }}
+      - run:
+          name: Build
+          command: cd webapp && npm install
+      - save_cache:
+          key: pulse-webapp-{{ .Branch }}-{{ checksum "webapp/package-lock.json" }}
+          paths:
+            - "webapp/node_modules"
+
+      - run:
+          name: Test
+          command: cd webapp && npm run test -- --no-watch --no-progress --browsers=ChromeHeadlessCI
+
+      - run:
+          name: Test E2E
+          command: cd webapp && npm run e2e -- --protractor-config=webapp/e2e/protractor-ci.conf.js
