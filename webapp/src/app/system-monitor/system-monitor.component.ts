@@ -70,7 +70,8 @@ export class SystemMonitorComponent implements OnInit {
             if (dataset.data.length > DATAPOINTS) {
                 dataset.data = dataset.data.slice(-1 * DATAPOINTS);
             }
-            dataset.data.push({
+            let data = dataset.data as ChartPoint[];
+            data.push(<ChartPoint>{
                 t: message.recordedAt, y: message.percentDiskUsed
             });
 
