@@ -1,5 +1,5 @@
 <div>
-  <div *ngFor="let mount of mounts">
+  <div class="monitor-graph" *ngFor="let mount of mounts">
     <h3>Mount: {{ mount }}</h3>
     <canvas [id]="'disk-usage-' + mount"></canvas>
   </div>
