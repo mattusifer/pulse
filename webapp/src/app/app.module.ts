@@ -9,7 +9,6 @@ import { UiModule } from './ui/ui.module';
 @NgModule({
     declarations: [
         AppComponent,
-        SystemMonitorComponent,
         SystemMonitorComponent
     ],
     imports: [

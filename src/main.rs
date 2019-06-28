@@ -65,7 +65,7 @@ fn main() -> Result<()> {
                     .index_file("index.html"),
             )
     })
-    .bind("127.0.0.1:8088")?
+    .bind("0.0.0.0:8088")?
     .start();
 
     system.run()?;

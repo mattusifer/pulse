@@ -10,7 +10,7 @@ const TICK_MS = 200;
 const DATAPOINTS = 20;
 
 @Component({
-    selector: 'app-system-monitor',
+    selector: 'system-monitor',
     templateUrl: './system-monitor.component.html',
     styleUrls: ['./system-monitor.component.scss']
 })
