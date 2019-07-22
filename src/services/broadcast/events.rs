@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::services::news;
+use crate::{db::models::Tweet, services::news};
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
 pub struct BroadcastEventKey(String);
@@ -16,6 +16,7 @@ impl From<String> for BroadcastEventKey {
 pub enum BroadcastEventType {
     HighDiskUsage,
     Newscast,
+    TwitterAlert,
 }
 
 #[derive(Clone, Debug)]
@@ -24,6 +25,12 @@ pub enum BroadcastEvent {
         filesystem_mount: String,
         current_usage: f64,
         max_usage: f64,
+    },
+    TwitterAlert {
+        group_name: String,
+        current_count: i64,
+        max_count: i64,
+        tweets: Vec<Tweet>,
     },
     Newscast {
         new_york_times: Vec<news::ArticleSection>,
@@ -46,6 +53,27 @@ impl BroadcastEvent {
                 )
                 .to_string(),
             ),
+
+            BroadcastEvent::TwitterAlert {
+                group_name,
+                current_count,
+                max_count,
+                tweets,
+            } => {
+                let formatted_tweets = tweets
+                    .iter()
+                    .map(|t| format!("{:?}", t))
+                    .collect::<Vec<String>>()
+                    .join("\n");
+                (
+                    format!("Twitter Alert: {}", group_name),
+                    format!(
+                        "Group {} had a spike of {} tweets, which exceeds the max of {}.\n\n{:?}",
+                        group_name, current_count, max_count, formatted_tweets
+                    )
+                        .to_string(),
+                )
+            }
 
             BroadcastEvent::Newscast { new_york_times } => {
                 ("News".to_string(), {
@@ -98,6 +126,9 @@ impl BroadcastEvent {
                 BroadcastEventType::HighDiskUsage
             }
             BroadcastEvent::Newscast { .. } => BroadcastEventType::Newscast,
+            BroadcastEvent::TwitterAlert { .. } => {
+                BroadcastEventType::TwitterAlert
+            }
         }
     }
 
@@ -110,6 +141,9 @@ impl BroadcastEvent {
                 + filesystem_mount)
                 .into(),
             BroadcastEvent::Newscast { .. } => {
+                serde_json::to_string(&self.event_type()).unwrap().into()
+            }
+            BroadcastEvent::TwitterAlert { .. } => {
                 serde_json::to_string(&self.event_type()).unwrap().into()
             }
         }

@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use crate::{
     config,
     error::Result,
-    schema::{disk_usage, tasks},
+    schema::{disk_usage, tasks, tweets},
 };
 
 pub mod models;
@@ -57,6 +57,13 @@ impl Database {
     ) -> Result<models::DiskUsage> {
         self.inner.lock().unwrap().insert_disk_usage(disk_usage)
     }
+
+    pub fn insert_tweet(
+        &self,
+        tweet: models::NewTweet,
+    ) -> Result<models::Tweet> {
+        self.inner.lock().unwrap().insert_tweet(tweet)
+    }
 }
 
 pub trait DatabaseInner {
@@ -65,6 +72,7 @@ pub trait DatabaseInner {
         &self,
         disk_usage: models::NewDiskUsage,
     ) -> Result<models::DiskUsage>;
+    fn insert_tweet(&self, tweet: models::NewTweet) -> Result<models::Tweet>;
 }
 
 pub struct PostgresDatabase {
@@ -103,6 +111,13 @@ impl DatabaseInner for PostgresDatabase {
     ) -> Result<models::DiskUsage> {
         diesel::insert_into(disk_usage::table)
             .values(&disk_usage)
+            .get_result(&self.connection)
+            .map_err(Into::into)
+    }
+
+    fn insert_tweet(&self, tweet: models::NewTweet) -> Result<models::Tweet> {
+        diesel::insert_into(tweets::table)
+            .values(&tweet)
             .get_result(&self.connection)
             .map_err(Into::into)
     }

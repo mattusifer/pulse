@@ -40,7 +40,6 @@ impl Actor for Ws {
 
 impl StreamHandler<ws::Message, ws::ProtocolError> for Ws {
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
-        log::info!("WS: {:?}", msg);
         match msg {
             ws::Message::Ping(msg) => {
                 self.last_heartbeat = Instant::now();

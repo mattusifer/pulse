@@ -8,14 +8,6 @@ table! {
 }
 
 table! {
-    schedules (id) {
-        id -> Int4,
-        message -> Varchar,
-        schedule -> Text,
-    }
-}
-
-table! {
     tasks (id) {
         id -> Int4,
         task -> Varchar,
@@ -23,8 +15,24 @@ table! {
     }
 }
 
+table! {
+    tweets (id) {
+        id -> Int4,
+        twitter_tweet_id -> Varchar,
+        group_name -> Varchar,
+        latitude -> Nullable<Float8>,
+        longitude -> Nullable<Float8>,
+        favorite_count -> Int4,
+        retweet_count -> Int4,
+        username -> Nullable<Varchar>,
+        lang -> Nullable<Varchar>,
+        text -> Varchar,
+        tweeted_at -> Timestamptz,
+    }
+}
+
 allow_tables_to_appear_in_same_query!(
     disk_usage,
-    schedules,
     tasks,
+    tweets,
 );

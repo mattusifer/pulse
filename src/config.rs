@@ -98,6 +98,21 @@ pub struct NewsConfig {
 }
 
 #[derive(Clone, Deserialize, Debug)]
+pub struct TwitterTerms {
+    pub group_name: String,
+    pub terms: Vec<String>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct TwitterConfig {
+    pub consumer_key: String,
+    pub consumer_secret: String,
+    pub access_key: String,
+    pub access_secret: String,
+    pub terms: Vec<TwitterTerms>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
 pub struct DatabaseConfig {
     pub host: String,
     pub port: u16,
@@ -151,6 +166,7 @@ pub struct Config {
     pub streams: Vec<ScheduledStreamConfig>,
     pub broadcast: BroadcastConfig,
     pub database: DatabaseConfig,
+    pub twitter: Option<TwitterConfig>,
 }
 
 impl Default for Config {
@@ -171,6 +187,7 @@ impl Default for Config {
                 username: "postgres".to_string(),
                 password: "postgres".to_string(),
             },
+            twitter: None,
         }
     }
 }

@@ -23,7 +23,7 @@ use crate::{
     routes::Ws,
     services::{
         broadcast::Broadcast, news::News, scheduler::Scheduler,
-        system::SystemMonitor,
+        system::SystemMonitor, twitter::Twitter,
     },
 };
 
@@ -37,9 +37,10 @@ fn main() -> Result<()> {
 
     let system = System::new("pulse");
 
-    // Only start broadcast if alerts have been configured
-    // (it will be defined otherwise)
+    // Only start broadcast and twitter actors if they have been configured
     Broadcast::new()?.map(|b| b.start());
+    Twitter::new().map(|t| t.start());
+
     let monitor = SystemMonitor::new().start();
 
     let news_addr = News::new().start();

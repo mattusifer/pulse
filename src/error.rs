@@ -1,3 +1,5 @@
+pub mod future;
+
 use std::{fmt, io, path::PathBuf, result};
 
 use failure::{Backtrace, Context, Fail};
@@ -60,8 +62,8 @@ pub enum ErrorKind {
     #[fail(display = "crossbeam error: {}", error)]
     CrossbeamError { error: String },
 
-    #[fail(display = "sled error: {}", error)]
-    SledError { error: String },
+    #[fail(display = "twitter error: {}", error)]
+    TwitterError { error: String },
 
     #[fail(display = "serde error: {}", error)]
     SerdeError { error: String },
@@ -178,10 +180,10 @@ impl From<lettre::smtp::error::Error> for Error {
     }
 }
 
-/// map from sled errors
-impl<T: fmt::Debug> From<pagecache::Error<T>> for Error {
-    fn from(error: pagecache::Error<T>) -> Error {
-        Error::from(Context::new(ErrorKind::SledError {
+/// map from twitter errors
+impl From<egg_mode::error::Error> for Error {
+    fn from(error: egg_mode::error::Error) -> Error {
+        Error::from(Context::new(ErrorKind::TwitterError {
             error: format!("{}", error),
         }))
     }
