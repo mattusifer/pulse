@@ -37,5 +37,4 @@ systemstat = { git = "https://github.com/myfreeweb/systemstat.git" }
 toml = "^0.4"
 
 [dev-dependencies]
-actix-rt = "^0.2"
 tokio = { version = "^0.2", features = ["time"] }
