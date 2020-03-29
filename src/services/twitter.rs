@@ -1,18 +1,15 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
-use actix::{fut::wrap_future, Actor, AsyncContext, Context};
+use actix::{Actor, Context};
 use chrono::NaiveDateTime;
 use egg_mode::{stream::StreamMessage, KeyPair, Token};
-use futures::stream::Stream as _Stream;
+use futures::stream::Stream;
 
 use crate::{
     config::{config, TwitterConfig},
     db::{database, models},
-    error::{
-        future::{PulseStream, Stream},
-        Result,
-    },
+    error::{future::PulseStream, Error, Result},
     services::broadcast::{BroadcastEvent, OUTBOX},
 };
 
@@ -71,7 +68,12 @@ impl Twitter {
 
     pub fn filter_streams(
         &self,
-    ) -> impl Iterator<Item = (String, Box<Stream<StreamMessage>>)> + '_ {
+    ) -> impl Iterator<
+        Item = (
+            String,
+            Box<dyn Stream<Item = StreamMessage, Error = Error> + Send>,
+        ),
+    > + '_ {
         self.config.terms.iter().map(move |terms| {
             (
                 terms.group_name.clone(),

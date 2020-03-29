@@ -42,11 +42,12 @@ impl News {
             .new_york_times
             .iter()
             .flat_map(|nyt_config| {
-                let new_york_times =
-                    NewYorkTimes::new(nyt_config.api_key.clone());
+                let new_york_times = NewYorkTimes::new(nyt_config.api_key.clone());
 
-                nyt_config.most_popular_viewed_period.iter().map(
-                    move |period| {
+                nyt_config
+                    .most_popular_viewed_period
+                    .iter()
+                    .map(move |period| {
                         new_york_times
                             .most_popular_viewed(period.clone())
                             .map(|response| ArticleSection {
@@ -56,24 +57,19 @@ impl News {
                                     .into_iter()
                                     .map(|article| Article {
                                         url: article.url,
-                                        published_date:
-                                            NaiveDate::parse_from_str(
-                                                &article.published_date,
-                                                "%Y-%m-%d",
-                                            )
-                                            .unwrap(),
+                                        published_date: NaiveDate::parse_from_str(
+                                            &article.published_date,
+                                            "%Y-%m-%d",
+                                        )
+                                        .unwrap(),
                                         title: article.title,
                                         r#abstract: article.r#abstract,
-                                        metric: format!(
-                                            "{} views",
-                                            article.views
-                                        ),
+                                        metric: format!("{} views", article.views),
                                     })
                                     .collect(),
                             })
                             .map_err(Into::into)
-                    },
-                )
+                    })
             })
             .collect()
     }
@@ -96,11 +92,7 @@ impl Actor for News {
 impl Handler<ScheduledTaskMessage> for News {
     type Result = Result<()>;
 
-    fn handle(
-        &mut self,
-        msg: ScheduledTaskMessage,
-        _ctx: &mut Context<Self>,
-    ) -> Self::Result {
+    fn handle(&mut self, msg: ScheduledTaskMessage, _ctx: &mut Context<Self>) -> Self::Result {
         match msg {
             ScheduledTaskMessage::FetchNews => self.build_newscast(),
         }

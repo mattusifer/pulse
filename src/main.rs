@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
             .service(web::resource("/ws").route(web::get().to(
                 |request, stream: web::Payload, monitor: web::Data<Addr<SystemMonitor>>| async move {
                     ws::start(Ws::new(monitor.as_ref().clone()), &request, stream)
-                }, 
+                }
             )))
             // index
             .service(Files::new("/", "./webapp/dist/webapp/").index_file("index.html"))

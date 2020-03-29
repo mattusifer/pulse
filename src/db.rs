@@ -51,27 +51,18 @@ impl Database {
         self.inner.lock().unwrap().insert_task(task)
     }
 
-    pub fn insert_disk_usage(
-        &self,
-        disk_usage: models::NewDiskUsage,
-    ) -> Result<models::DiskUsage> {
+    pub fn insert_disk_usage(&self, disk_usage: models::NewDiskUsage) -> Result<models::DiskUsage> {
         self.inner.lock().unwrap().insert_disk_usage(disk_usage)
     }
 
-    pub fn insert_tweet(
-        &self,
-        tweet: models::NewTweet,
-    ) -> Result<models::Tweet> {
+    pub fn insert_tweet(&self, tweet: models::NewTweet) -> Result<models::Tweet> {
         self.inner.lock().unwrap().insert_tweet(tweet)
     }
 }
 
 pub trait DatabaseInner {
     fn insert_task(&self, task: models::NewTask) -> Result<models::Task>;
-    fn insert_disk_usage(
-        &self,
-        disk_usage: models::NewDiskUsage,
-    ) -> Result<models::DiskUsage>;
+    fn insert_disk_usage(&self, disk_usage: models::NewDiskUsage) -> Result<models::DiskUsage>;
     fn insert_tweet(&self, tweet: models::NewTweet) -> Result<models::Tweet>;
 }
 
@@ -105,10 +96,7 @@ impl DatabaseInner for PostgresDatabase {
             .map_err(Into::into)
     }
 
-    fn insert_disk_usage(
-        &self,
-        disk_usage: models::NewDiskUsage,
-    ) -> Result<models::DiskUsage> {
+    fn insert_disk_usage(&self, disk_usage: models::NewDiskUsage) -> Result<models::DiskUsage> {
         diesel::insert_into(disk_usage::table)
             .values(&disk_usage)
             .get_result(&self.connection)

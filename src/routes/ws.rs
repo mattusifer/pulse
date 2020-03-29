@@ -3,8 +3,6 @@ use std::time::{Duration, Instant};
 use actix::prelude::*;
 use actix::{Actor, ActorContext, Addr, AsyncContext, Handler, StreamHandler};
 use actix_web_actors::ws;
-use futures::Future;
-use futures_util::FutureExt;
 
 use crate::{
     db::models,
@@ -30,8 +28,7 @@ impl Actor for Ws {
     /// Start the heartbeat process on actor start
     fn started(&mut self, ctx: &mut Self::Context) {
         // subscribe to system updates
-        let id = self
-            .system_monitor
+        self.system_monitor
             .send(Subscribe(Addr::recipient(ctx.address())))
             .into_actor(self)
             .map(move |res, act, _| act.subscriber_id = Some(res.unwrap()))

@@ -1,13 +1,7 @@
 use crate::error::Error;
 
-pub type Future<T> = dyn futures::Future<Item = T, Error = Error>;
-pub type Stream<T> =
-    dyn futures::stream::Stream<Item = T, Error = Error> + Send;
-
 pub trait PulseFuture<T> {
-    fn into_box(
-        self,
-    ) -> Box<dyn futures::Future<Item = T, Error = Error> + Send>
+    fn into_box(self) -> Box<dyn futures::Future<Item = T, Error = Error> + Send>
     where
         Self: 'static + Send + Sized + futures::Future<Item = T, Error = Error>,
     {
@@ -24,14 +18,9 @@ where
 }
 
 pub trait PulseStream<T> {
-    fn into_box(
-        self,
-    ) -> Box<dyn futures::stream::Stream<Item = T, Error = Error> + Send>
+    fn into_box(self) -> Box<dyn futures::stream::Stream<Item = T, Error = Error> + Send>
     where
-        Self: 'static
-            + Send
-            + Sized
-            + futures::stream::Stream<Item = T, Error = Error>,
+        Self: 'static + Send + Sized + futures::stream::Stream<Item = T, Error = Error>,
     {
         Box::new(self)
     }

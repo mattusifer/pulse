@@ -96,10 +96,7 @@ pub struct NewTweet {
 }
 
 impl NewTweet {
-    pub fn from_egg_mode_tweet(
-        group_name: String,
-        egg_mode_tweet: EggModeTweet,
-    ) -> Self {
+    pub fn from_egg_mode_tweet(group_name: String, egg_mode_tweet: EggModeTweet) -> Self {
         Self {
             twitter_tweet_id: egg_mode_tweet.id.to_string(),
             group_name,
