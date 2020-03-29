@@ -1,7 +1,8 @@
 use crate::error::Error;
 
-pub type Future<T> = futures::Future<Item = T, Error = Error>;
-pub type Stream<T> = futures::stream::Stream<Item = T, Error = Error> + Send;
+pub type Future<T> = dyn futures::Future<Item = T, Error = Error>;
+pub type Stream<T> =
+    dyn futures::stream::Stream<Item = T, Error = Error> + Send;
 
 pub trait PulseFuture<T> {
     fn into_box(

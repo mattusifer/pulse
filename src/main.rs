@@ -22,12 +22,13 @@ use crate::{
     error::Result,
     routes::Ws,
     services::{
-        broadcast::Broadcast, news::News, scheduler::Scheduler,
-        system::SystemMonitor, twitter::Twitter,
+        broadcast::Broadcast, news::News, scheduler::Scheduler, system::SystemMonitor,
+        twitter::Twitter,
     },
 };
 
-fn main() -> Result<()> {
+#[actix_rt::main]
+async fn main() -> Result<()> {
     env::set_var("RUST_LOG", "actix_server=info,actix_web=info,pulse=info");
     pretty_env_logger::init();
 
@@ -50,24 +51,21 @@ fn main() -> Result<()> {
     log::info!("Scheduler started");
 
     HttpServer::new(move || {
-        let monitor = monitor.clone();
-
         App::new()
             .wrap(middleware::Logger::default())
+            .data(monitor.clone())
             // websocket
             .service(web::resource("/ws").route(web::get().to(
-                move |request, stream: web::Payload| {
-                    ws::start(Ws::new(monitor.clone()), &request, stream)
-                },
+                |request, stream: web::Payload, monitor: web::Data<Addr<SystemMonitor>>| async move {
+                    ws::start(Ws::new(monitor.as_ref().clone()), &request, stream)
+                }, 
             )))
             // index
-            .service(
-                Files::new("/", "./webapp/dist/webapp/")
-                    .index_file("index.html"),
-            )
+            .service(Files::new("/", "./webapp/dist/webapp/").index_file("index.html"))
     })
     .bind("0.0.0.0:8088")?
-    .start();
+    .run()
+    .await?;
 
     system.run()?;
 

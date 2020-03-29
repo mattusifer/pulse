@@ -1,6 +1,8 @@
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use actix::{fut::wrap_future, Actor, AsyncContext, Context};
+use chrono::NaiveDateTime;
 use egg_mode::{stream::StreamMessage, KeyPair, Token};
 use futures::stream::Stream as _Stream;
 
@@ -13,6 +15,8 @@ use crate::{
     },
     services::broadcast::{BroadcastEvent, OUTBOX},
 };
+
+const MAX_TWEETS_TO_SEND: usize = 100;
 
 trait TwitterPorts {
     fn record_tweet(&self, tweet: models::NewTweet) -> Result<models::Tweet>;
@@ -34,7 +38,9 @@ impl TwitterPorts for LiveTwitterPorts {
 #[derive(Clone)]
 pub struct Twitter {
     config: TwitterConfig,
-    ports: Arc<Box<TwitterPorts>>,
+    ports: Arc<Box<dyn TwitterPorts>>,
+    popular_tweets: HashMap<String, Vec<models::NewTweet>>,
+    tweets_per_second: HashMap<String, VecDeque<NaiveDateTime>>,
 }
 
 impl Twitter {
@@ -42,6 +48,8 @@ impl Twitter {
         config().twitter.map(|twitter_config| Self {
             config: twitter_config,
             ports: Arc::new(Box::new(LiveTwitterPorts)),
+            popular_tweets: HashMap::new(),
+            tweets_per_second: HashMap::new(),
         })
     }
 
@@ -84,33 +92,38 @@ impl Actor for Twitter {
     /// When the twitter actor is started, open a connection to the
     /// streaming websocket
     fn started(&mut self, ctx: &mut Context<Self>) {
-        let twitter = self.clone();
-        self.filter_streams().for_each(move |(group_name, stream)| {
-            let twitter = twitter.clone();
-            let group_name_clone = group_name.clone();
-            ctx.spawn(wrap_future(
-                stream
-                    .map_err(move |e| {
-                        log::error!(
-                            "Error encountered opening twitter stream for group {}: {:?}",
-                            group_name_clone, e
-                        )
-                    })
-                    .for_each(move |message| {
-                        let twitter = twitter.clone();
-                        if let StreamMessage::Tweet(tweet) = message {
-                            if let Err(e) = twitter.ports.record_tweet(
-                                models::NewTweet::from_egg_mode_tweet(
-                                    group_name.clone(), tweet
-                                )
-                            ) {
-                                log::error!("Error encountered when recording tweet: {:?}", e)
-                            }
-                        }
+        // let twitter = self.clone();
+        // self.filter_streams().for_each(move |(group_name, stream)| {
+        //     let twitter = twitter.clone();
+        //     let group_name_clone = group_name.clone();
+        //     ctx.spawn(wrap_future(
+        //         stream
+        //             .map_err(move |e| {
+        //                 log::error!(
+        //                     "Error encountered opening twitter stream for group {}: {:?}",
+        //                     group_name_clone,
+        //                     e
+        //                 )
+        //             })
+        //             .for_each(move |message| {
+        //                 let twitter = twitter.clone();
+        //                 if let StreamMessage::Tweet(egg_mode_tweet) = message {
+        //                     let tweet = models::NewTweet::from_egg_mode_tweet(
+        //                         group_name.clone(),
+        //                         egg_mode_tweet,
+        //                     );
+        //                     if len(twitter.most_popular_tweets) >= MAX_TWEETS_TO_SEND {
+        //                         let least_popular =
+        //                     }
 
-                        futures::future::ok(())
-                    }),
-            ));
-        });
+        //                     if let Err(e) = twitter.ports.record_tweet(tweet) {
+        //                         log::error!("Error encountered when recording tweet: {:?}", e)
+        //                     }
+        //                 }
+
+        //                 futures::future::ok(())
+        //             }),
+        //     ));
+        // });
     }
 }

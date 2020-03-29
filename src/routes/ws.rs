@@ -1,8 +1,10 @@
 use std::time::{Duration, Instant};
 
+use actix::prelude::*;
 use actix::{Actor, ActorContext, Addr, AsyncContext, Handler, StreamHandler};
 use actix_web_actors::ws;
 use futures::Future;
+use futures_util::FutureExt;
 
 use crate::{
     db::models,
@@ -28,19 +30,20 @@ impl Actor for Ws {
     /// Start the heartbeat process on actor start
     fn started(&mut self, ctx: &mut Self::Context) {
         // subscribe to system updates
-        self.system_monitor
+        let id = self
+            .system_monitor
             .send(Subscribe(Addr::recipient(ctx.address())))
-            .map(|id| self.subscriber_id = Some(id))
-            .wait()
-            .unwrap();
+            .into_actor(self)
+            .map(move |res, act, _| act.subscriber_id = Some(res.unwrap()))
+            .wait(ctx);
 
         self.heartbeat(ctx);
     }
 }
 
-impl StreamHandler<ws::Message, ws::ProtocolError> for Ws {
-    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
-        match msg {
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for Ws {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        match msg.unwrap() {
             ws::Message::Ping(msg) => {
                 self.last_heartbeat = Instant::now();
                 ctx.pong(&msg);
@@ -51,6 +54,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for Ws {
             ws::Message::Text(text) => ctx.text(text),
             ws::Message::Binary(bin) => ctx.binary(bin),
             ws::Message::Close(_) => self.disconnect(ctx),
+            ws::Message::Continuation(_) => (),
             ws::Message::Nop => (),
         }
     }
@@ -69,24 +73,18 @@ impl Ws {
     /// timed out
     fn heartbeat(&self, ctx: &mut <Self as Actor>::Context) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |this, ctx| {
-            if Instant::now().duration_since(this.last_heartbeat)
-                > CLIENT_TIMEOUT
-            {
+            if Instant::now().duration_since(this.last_heartbeat) > CLIENT_TIMEOUT {
                 log::warn!("Websocket Client heartbeat failed, disconnecting");
                 this.disconnect(ctx);
                 return;
             }
 
-            ctx.ping("");
+            ctx.ping(b"");
         });
     }
 
     /// Send system status updates to the client
-    fn send_update(
-        &self,
-        update: models::DiskUsage,
-        ctx: &mut <Self as Actor>::Context,
-    ) {
+    fn send_update(&self, update: models::DiskUsage, ctx: &mut <Self as Actor>::Context) {
         ctx.text(update)
     }
 

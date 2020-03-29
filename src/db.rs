@@ -37,7 +37,7 @@ pub fn initialize_from(db: Database) {
 
 #[derive(Clone)]
 pub struct Database {
-    inner: Arc<Mutex<DatabaseInner + Send>>,
+    inner: Arc<Mutex<dyn DatabaseInner + Send>>,
 }
 
 impl Database {

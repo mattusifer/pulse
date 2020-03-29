@@ -26,6 +26,7 @@ impl NewTask {
 }
 
 #[derive(Queryable, Clone, Debug, Message, Serialize, Deserialize)]
+#[rtype(result = "()")]
 #[serde(rename_all = "snake_case")]
 pub struct DiskUsage {
     pub id: i32,
@@ -57,6 +58,7 @@ impl NewDiskUsage {
 }
 
 #[derive(Queryable, Clone, Debug, Message, Serialize, Deserialize)]
+#[rtype(result = "()")]
 #[serde(rename_all = "snake_case")]
 pub struct Tweet {
     pub id: i32,
