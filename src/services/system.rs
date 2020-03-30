@@ -330,7 +330,6 @@ mod test {
                 let msg = subscriber.send(GetState).await.unwrap();
 
                 let updates: Vec<models::DiskUsage> = serde_json::from_str(&msg).unwrap();
-                println!("{:?}", updates);
                 assert!(updates.len() == 3);
 
                 System::current().stop();

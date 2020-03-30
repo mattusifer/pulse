@@ -64,7 +64,7 @@ impl News {
                                         .unwrap(),
                                         title: article.title,
                                         r#abstract: article.r#abstract,
-                                        metric: format!("{} views", article.views),
+                                        metric: format!("{:?} views", article.views),
                                     })
                                     .collect(),
                             })
