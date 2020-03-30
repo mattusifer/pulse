@@ -20,8 +20,7 @@ use crate::{
 type LastAlerted = HashMap<BroadcastEventKey, Instant>;
 
 lazy_static! {
-    pub static ref OUTBOX: ArrayQueue<BroadcastEvent> =
-        ArrayQueue::new(100_000);
+    pub static ref OUTBOX: ArrayQueue<BroadcastEvent> = ArrayQueue::new(100_000);
     static ref LAST_ALERTED: Mutex<LastAlerted> = Mutex::new(HashMap::new());
 }
 
@@ -52,7 +51,7 @@ impl BroadcastPorts for LiveBroadcastPorts {
 
 pub struct Broadcast {
     alerts: HashMap<BroadcastEventType, AlertConfig>,
-    ports: Box<BroadcastPorts + Send + Sync>,
+    ports: Box<dyn BroadcastPorts + Send + Sync>,
 }
 
 impl Broadcast {
@@ -77,7 +76,7 @@ impl Broadcast {
     #[cfg(test)]
     fn test(
         alerts: HashMap<BroadcastEventType, AlertConfig>,
-        ports: Box<BroadcastPorts + Send + Sync>,
+        ports: Box<dyn BroadcastPorts + Send + Sync>,
     ) -> Self {
         Self { alerts, ports }
     }
@@ -161,8 +160,7 @@ impl Actor for Broadcast {
 pub mod test {
     use super::*;
     use crate::{
-        config::AlertType, error::Result,
-        services::broadcast::events::BroadcastEventType,
+        config::AlertType, error::Result, services::broadcast::events::BroadcastEventType,
     };
     use std::{
         sync::{Arc, Mutex},
@@ -183,10 +181,7 @@ pub mod test {
             }
         }
 
-        pub fn with_sent_emails(
-            mut self,
-            sent_emails: Arc<Mutex<Vec<(String, String)>>>,
-        ) -> Self {
+        pub fn with_sent_emails(mut self, sent_emails: Arc<Mutex<Vec<(String, String)>>>) -> Self {
             self.sent_emails = sent_emails;
             self
         }
@@ -322,8 +317,7 @@ pub mod test {
             current_usage: 100.00,
             max_usage: 50.00,
         };
-        let events: Arc<Mutex<Vec<BroadcastEvent>>> =
-            Arc::new(Mutex::new(vec![]));
+        let events: Arc<Mutex<Vec<BroadcastEvent>>> = Arc::new(Mutex::new(vec![]));
         let events_clone = Arc::clone(&events);
         for _ in 1..10 {
             events.lock().unwrap().push(event.clone());

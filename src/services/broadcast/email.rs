@@ -4,11 +4,7 @@ use lettre_email::Email;
 
 use crate::{config::EmailConfig, error::Result};
 
-pub fn send_email(
-    config: &EmailConfig,
-    subject: String,
-    body: String,
-) -> Result<()> {
+pub fn send_email(config: &EmailConfig, subject: String, body: String) -> Result<()> {
     let mut email = Email::builder();
     for recipient in &config.recipients {
         email = email.to(recipient.clone())

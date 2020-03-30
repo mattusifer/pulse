@@ -1,25 +1,39 @@
-FROM rust:1.35-stretch
+###############################################################################
+# TARGET: build
+###############################################################################
 
-# install node 12.x
-RUN apt-get update -yq && apt-get upgrade -yq && apt-get install -yq curl
-RUN curl -sL https://deb.nodesource.com/setup_12.x | bash - && apt-get install -yq nodejs build-essential
+FROM rust:1.42-slim as build
+
+RUN apt-get -y update && apt-get -y install libpq-dev pkg-config nodejs npm
 
 # dependencies
+RUN npm install -g npm@latest
 RUN npm install -g @angular/cli
-RUN cargo install diesel_cli
+RUN cargo install diesel_cli --no-default-features --features postgres
+
+WORKDIR /src
 
 # build and install webapp
-COPY ./webapp /src/webapp
-RUN cd /src/webapp && ng build
+COPY ./webapp ./webapp
+RUN cd ./webapp && npm install && ng build
 RUN mkdir /webapp
-RUN mv /src/webapp/dist /webapp/dist
+RUN mv ./webapp/dist /webapp/dist
 
 # install pulse
-COPY ./Cargo.toml ./Cargo.lock ./diesel.toml /src/
-COPY ./src /src/src
-COPY ./resources /src/resources
-COPY ./migrations /src/migrations
-RUN cargo install --path /src
+COPY ./Cargo.toml ./Cargo.lock ./diesel.toml ./
+COPY ./src ./src
+COPY ./resources ./resources
+COPY ./migrations /migrations
+RUN cargo install --path .
+
+###############################################################################
+# TARGET: service
+###############################################################################
+
+FROM build as service
+
+COPY --from=build /webapp /webapp
+COPY --from=build /migrations /migrations
 
 # run migrations and start the server
-ENTRYPOINT sleep 100 && diesel migration --migration-dir /src/migrations run && pulse
+ENTRYPOINT diesel migration --migration-dir /migrations run && pulse

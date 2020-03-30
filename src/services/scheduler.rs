@@ -26,7 +26,7 @@ impl SchedulerPorts for LiveSchedulerPorts {
 pub struct Scheduler {
     tasks: Vec<ScheduledTaskConfig>,
     task_runners: Vec<Recipient<ScheduledTaskMessage>>,
-    ports: Box<SchedulerPorts>,
+    ports: Box<dyn SchedulerPorts>,
 }
 impl Scheduler {
     pub fn new() -> Self {
@@ -38,10 +38,7 @@ impl Scheduler {
     }
 
     #[cfg(test)]
-    fn test(
-        tasks: Vec<ScheduledTaskConfig>,
-        test_ports: Box<SchedulerPorts>,
-    ) -> Self {
+    fn test(tasks: Vec<ScheduledTaskConfig>, test_ports: Box<dyn SchedulerPorts>) -> Self {
         Self {
             tasks,
             task_runners: vec![],
@@ -50,18 +47,11 @@ impl Scheduler {
     }
 
     /// Add a service to the scheduler
-    pub fn add_task_runner(
-        &mut self,
-        task_runner: Recipient<ScheduledTaskMessage>,
-    ) {
+    pub fn add_task_runner(&mut self, task_runner: Recipient<ScheduledTaskMessage>) {
         self.task_runners.push(task_runner)
     }
 
-    fn schedule_task(
-        &self,
-        ctx: &mut Context<Self>,
-        task: ScheduledTaskConfig,
-    ) {
+    fn schedule_task(&self, ctx: &mut Context<Self>, task: ScheduledTaskConfig) {
         // record this message in the db
         serde_json::to_string(&task.message)
             .map_err(Into::into)
@@ -119,11 +109,7 @@ mod test {
     impl Handler<ScheduledTaskMessage> for TestActor {
         type Result = Result<()>;
 
-        fn handle(
-            &mut self,
-            msg: ScheduledTaskMessage,
-            _ctx: &mut Context<Self>,
-        ) -> Self::Result {
+        fn handle(&mut self, msg: ScheduledTaskMessage, _ctx: &mut Context<Self>) -> Self::Result {
             self.messages_recieved.lock().unwrap().push(msg);
             Ok(())
         }
@@ -150,8 +136,7 @@ mod test {
     fn scheduler_sends_messages_to_configured_service_on_cron_schedule() {
         let system = System::new("test");
 
-        let messages_received: Arc<Mutex<Vec<ScheduledTaskMessage>>> =
-            Arc::new(Mutex::new(vec![]));
+        let messages_received: Arc<Mutex<Vec<ScheduledTaskMessage>>> = Arc::new(Mutex::new(vec![]));
 
         let test_actor = TestActor {
             messages_recieved: Arc::clone(&messages_received),
@@ -193,8 +178,7 @@ mod test {
     fn scheduler_doesnt_send_to_unconfigured_service() {
         let system = System::new("test");
 
-        let messages_received: Arc<Mutex<Vec<ScheduledTaskMessage>>> =
-            Arc::new(Mutex::new(vec![]));
+        let messages_received: Arc<Mutex<Vec<ScheduledTaskMessage>>> = Arc::new(Mutex::new(vec![]));
 
         TestActor {
             messages_recieved: Arc::clone(&messages_received),

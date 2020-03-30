@@ -4,14 +4,13 @@ services:
   app:
     build: .
     volumes:
-      - ~/.pulse:/.pulse
+      - ~/.pulse:/root/.pulse
     ports:
       - 8088:8088
     environment:
       # TODO: Find a way to not have to pass this in - we currently
       #       have to duplicate this both in the config and here
-      DATABASE_URL: "postgres://postgres:dev@db/pulse"
-      HOME: "/"
+      DATABASE_URL: "postgres://postgres:dev@db"
     depends_on:
      - db
   db:

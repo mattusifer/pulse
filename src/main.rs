@@ -13,7 +13,7 @@ extern crate diesel;
 
 use std::env;
 
-use actix::{Actor, Addr, System};
+use actix::{Actor, Addr};
 use actix_files::Files;
 use actix_web::{middleware, web, App, HttpServer};
 use actix_web_actors::ws;
@@ -22,20 +22,19 @@ use crate::{
     error::Result,
     routes::Ws,
     services::{
-        broadcast::Broadcast, news::News, scheduler::Scheduler,
-        system::SystemMonitor, twitter::Twitter,
+        broadcast::Broadcast, news::News, scheduler::Scheduler, system::SystemMonitor,
+        twitter::Twitter,
     },
 };
 
-fn main() -> Result<()> {
+#[actix_rt::main]
+async fn main() -> Result<()> {
     env::set_var("RUST_LOG", "actix_server=info,actix_web=info,pulse=info");
     pretty_env_logger::init();
 
     config::initialize_from_file()?;
     db::initialize_postgres()?;
     log::info!("Database connection initialized");
-
-    let system = System::new("pulse");
 
     // Only start broadcast and twitter actors if they have been configured
     Broadcast::new()?.map(|b| b.start());
@@ -50,26 +49,20 @@ fn main() -> Result<()> {
     log::info!("Scheduler started");
 
     HttpServer::new(move || {
-        let monitor = monitor.clone();
-
         App::new()
+            .wrap(middleware::DefaultHeaders::new().header("X-Version", "0.2"))
+            .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())
-            // websocket
-            .service(web::resource("/ws").route(web::get().to(
-                move |request, stream: web::Payload| {
-                    ws::start(Ws::new(monitor.clone()), &request, stream)
-                },
-            )))
-            // index
-            .service(
-                Files::new("/", "./webapp/dist/webapp/")
-                    .index_file("index.html"),
-            )
+            .data(monitor.clone())
+            .service(web::resource("/ws").to(
+                |request, stream: web::Payload, monitor: web::Data<Addr<SystemMonitor>>| async move {
+                    ws::start(Ws::new(monitor.as_ref().clone()), &request, stream)
+                }
+            ))
+            .service(Files::new("/", "./webapp/dist/webapp/").index_file("index.html"))
     })
-    .bind("0.0.0.0:8088")?
-    .start();
-
-    system.run()?;
-
-    Ok(())
+        .bind("0.0.0.0:8088")?
+        .run()
+        .await
+        .map_err(Into::into)
 }

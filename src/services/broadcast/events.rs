@@ -71,64 +71,53 @@ impl BroadcastEvent {
                         "Group {} had a spike of {} tweets, which exceeds the max of {}.\n\n{:?}",
                         group_name, current_count, max_count, formatted_tweets
                     )
-                        .to_string(),
+                    .to_string(),
                 )
             }
 
-            BroadcastEvent::Newscast { new_york_times } => {
-                ("News".to_string(), {
-                    let sections = new_york_times
-                        .iter()
-                        .map(|section| {
-                            let articles = section
-                                .articles
-                                .iter()
-                                .map(|article| {
-                                    format!(
-                                        include_str!(
-                                            "../../../resources/email/news/article.html"),
-                                            url = article.url,
-                                            title = article.title,
-                                            publish_date = article.published_date,
-                                            r#abstract = article.r#abstract
-                                    )
-                                })
-                                .collect::<Vec<String>>()
-                                .join("<br>");
+            BroadcastEvent::Newscast { new_york_times } => ("News".to_string(), {
+                let sections = new_york_times
+                    .iter()
+                    .map(|section| {
+                        let articles = section
+                            .articles
+                            .iter()
+                            .map(|article| {
+                                format!(
+                                    include_str!("../../../resources/email/news/article.html"),
+                                    url = article.url,
+                                    title = article.title,
+                                    publish_date = article.published_date,
+                                    r#abstract = article.r#abstract
+                                )
+                            })
+                            .collect::<Vec<String>>()
+                            .join("<br>");
 
-                            format!(
-                                include_str!("../../../resources/email/news/section.html"),
-                                section_title = section.section_title,
-                                articles = articles
-                            )
-                        })
-                        .collect::<Vec<String>>()
-                        .join("<br>");
-
-                    format!(
-                        include_str!(
-                            "../../../resources/email/news/outline.html"
-                        ),
-                        title = "Digest",
-                        sections = sections,
-                        css = include_str!(
-                            "../../../resources/email/news/style.css"
+                        format!(
+                            include_str!("../../../resources/email/news/section.html"),
+                            section_title = section.section_title,
+                            articles = articles
                         )
-                    )
-                })
-            }
+                    })
+                    .collect::<Vec<String>>()
+                    .join("<br>");
+
+                format!(
+                    include_str!("../../../resources/email/news/outline.html"),
+                    title = "Digest",
+                    sections = sections,
+                    css = include_str!("../../../resources/email/news/style.css")
+                )
+            }),
         }
     }
 
     pub fn event_type(&self) -> BroadcastEventType {
         match self {
-            BroadcastEvent::HighDiskUsage { .. } => {
-                BroadcastEventType::HighDiskUsage
-            }
+            BroadcastEvent::HighDiskUsage { .. } => BroadcastEventType::HighDiskUsage,
             BroadcastEvent::Newscast { .. } => BroadcastEventType::Newscast,
-            BroadcastEvent::TwitterAlert { .. } => {
-                BroadcastEventType::TwitterAlert
-            }
+            BroadcastEvent::TwitterAlert { .. } => BroadcastEventType::TwitterAlert,
         }
     }
 
@@ -137,9 +126,7 @@ impl BroadcastEvent {
         match self {
             BroadcastEvent::HighDiskUsage {
                 filesystem_mount, ..
-            } => (serde_json::to_string(&self.event_type()).unwrap()
-                + filesystem_mount)
-                .into(),
+            } => (serde_json::to_string(&self.event_type()).unwrap() + filesystem_mount).into(),
             BroadcastEvent::Newscast { .. } => {
                 serde_json::to_string(&self.event_type()).unwrap().into()
             }

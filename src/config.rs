@@ -1,7 +1,4 @@
-use std::{
-    fs::File, io::Read, path::PathBuf, str::FromStr, sync::Mutex,
-    time::Duration,
-};
+use std::{fs::File, io::Read, path::PathBuf, str::FromStr, sync::Mutex, time::Duration};
 
 use chrono::Local;
 use cron::Schedule as CronSchedule;
