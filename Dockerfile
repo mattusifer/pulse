@@ -24,7 +24,7 @@ COPY ./Cargo.toml ./Cargo.lock ./diesel.toml ./
 COPY ./src ./src
 COPY ./resources ./resources
 COPY ./migrations /migrations
-RUN cargo install --debug --path .
+RUN cargo install --path .
 
 ###############################################################################
 # TARGET: service
