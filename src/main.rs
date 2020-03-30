@@ -13,7 +13,7 @@ extern crate diesel;
 
 use std::env;
 
-use actix::{Actor, Addr, System};
+use actix::{Actor, Addr};
 use actix_files::Files;
 use actix_web::{middleware, web, App, HttpServer};
 use actix_web_actors::ws;
@@ -36,8 +36,6 @@ async fn main() -> Result<()> {
     db::initialize_postgres()?;
     log::info!("Database connection initialized");
 
-    let system = System::new("pulse");
-
     // Only start broadcast and twitter actors if they have been configured
     Broadcast::new()?.map(|b| b.start());
     Twitter::new().map(|t| t.start());
@@ -52,22 +50,19 @@ async fn main() -> Result<()> {
 
     HttpServer::new(move || {
         App::new()
+            .wrap(middleware::DefaultHeaders::new().header("X-Version", "0.2"))
+            .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())
             .data(monitor.clone())
-            // websocket
-            .service(web::resource("/ws").route(web::get().to(
+            .service(web::resource("/ws").to(
                 |request, stream: web::Payload, monitor: web::Data<Addr<SystemMonitor>>| async move {
                     ws::start(Ws::new(monitor.as_ref().clone()), &request, stream)
                 }
-            )))
-            // index
+            ))
             .service(Files::new("/", "./webapp/dist/webapp/").index_file("index.html"))
     })
-    .bind("0.0.0.0:8088")?
-    .run()
-    .await?;
-
-    system.run()?;
-
-    Ok(())
+        .bind("0.0.0.0:8088")?
+        .run()
+        .await
+        .map_err(Into::into)
 }

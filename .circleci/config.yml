@@ -1,7 +1,7 @@
 jobs:
   rust:
     docker:
-      - image: rust:1.35-stretch
+      - image: rust:1.42-stretch
 
     steps:
       - checkout
