@@ -98,6 +98,7 @@ pub struct NewsConfig {
 pub struct TwitterTerms {
     pub group_name: String,
     pub terms: Vec<String>,
+    pub mentions_per_second_alert_above: u32,
 }
 
 #[derive(Clone, Deserialize, Debug)]

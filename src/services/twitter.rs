@@ -1,9 +1,13 @@
-use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 
-use actix::{Actor, Context};
+use actix::{fut::wrap_future, Actor, AsyncContext, Context};
 use chrono::NaiveDateTime;
-use egg_mode::{stream::TwitterStream, KeyPair, Token};
+use egg_mode::{
+    stream::{StreamMessage, TwitterStream},
+    KeyPair, Token,
+};
+use futures::stream::StreamExt;
 
 use crate::{
     config::{config, TwitterConfig},
@@ -35,7 +39,7 @@ impl TwitterPorts for LiveTwitterPorts {
 pub struct Twitter {
     config: TwitterConfig,
     ports: Arc<Box<dyn TwitterPorts>>,
-    popular_tweets: HashMap<String, Vec<models::NewTweet>>,
+    popular_tweets: BTreeMap<String, Vec<models::NewTweet>>,
     tweets_per_second: HashMap<String, VecDeque<NaiveDateTime>>,
 }
 
@@ -44,7 +48,7 @@ impl Twitter {
         config().twitter.map(|twitter_config| Self {
             config: twitter_config,
             ports: Arc::new(Box::new(LiveTwitterPorts)),
-            popular_tweets: HashMap::new(),
+            popular_tweets: BTreeMap::new(),
             tweets_per_second: HashMap::new(),
         })
     }
@@ -84,38 +88,53 @@ impl Actor for Twitter {
     /// When the twitter actor is started, open a connection to the
     /// streaming websocket
     fn started(&mut self, ctx: &mut Context<Self>) {
-        // let twitter = self.clone();
-        // self.filter_streams().for_each(move |(group_name, stream)| {
-        //     let twitter = twitter.clone();
-        //     let group_name_clone = group_name.clone();
-        //     ctx.spawn(wrap_future(
-        //         stream
-        //             .map_err(move |e| {
-        //                 log::error!(
-        //                     "Error encountered opening twitter stream for group {}: {:?}",
-        //                     group_name_clone,
-        //                     e
-        //                 )
-        //             })
-        //             .for_each(move |message| {
-        //                 let twitter = twitter.clone();
-        //                 if let StreamMessage::Tweet(egg_mode_tweet) = message {
-        //                     let tweet = models::NewTweet::from_egg_mode_tweet(
-        //                         group_name.clone(),
-        //                         egg_mode_tweet,
-        //                     );
-        //                     if len(twitter.most_popular_tweets) >= MAX_TWEETS_TO_SEND {
-        //                         let least_popular =
-        //                     }
+        let twitter = Arc::new(Mutex::new(self.clone()));
+        self.filter_streams().for_each(move |(group_name, stream)| {
+            let twitter = Arc::clone(&twitter);
+            let group_name_clone = group_name.clone();
+            ctx.spawn(wrap_future(stream.for_each(move |message| {
+                let mut twitter = twitter.lock().unwrap();
+                if let Ok(StreamMessage::Tweet(egg_mode_tweet)) = message {
+                    let new_tweet =
+                        models::NewTweet::from_egg_mode_tweet(group_name.clone(), egg_mode_tweet);
 
-        //                     if let Err(e) = twitter.ports.record_tweet(tweet) {
-        //                         log::error!("Error encountered when recording tweet: {:?}", e)
-        //                     }
-        //                 }
+                    log::info!("Received {:?}", new_tweet);
 
-        //                 futures::future::ok(())
-        //             }),
-        //     ));
-        // });
+                    if !twitter.popular_tweets.contains_key(&group_name_clone) {
+                        twitter
+                            .popular_tweets
+                            .insert(group_name_clone.clone(), vec![new_tweet.clone()]);
+                    } else if twitter.popular_tweets[&group_name_clone].len() >= MAX_TWEETS_TO_SEND
+                    {
+                        let tweets = twitter.popular_tweets.get_mut(&group_name_clone).unwrap();
+                        let minimum_favorite = tweets
+                            .iter()
+                            .map(|tweet| tweet.favorite_count)
+                            .min()
+                            .unwrap();
+                        let minimum_favorite_idx = tweets
+                            .iter()
+                            .position(|tweet| tweet.favorite_count == minimum_favorite)
+                            .unwrap();
+
+                        let removed = tweets.remove(minimum_favorite_idx);
+                        log::info!(
+                            "Maximum popular tweets exceeded for {}, removed {:?}",
+                            group_name_clone,
+                            removed
+                        );
+
+                        tweets.push(new_tweet.clone());
+                    }
+
+                    if let Err(e) = twitter.ports.record_tweet(new_tweet) {
+                        log::error!("Error encountered when recording tweet: {:?}", e)
+                    }
+                } else {
+                    log::error!("Error encountered parsing tweet: {:?}", message)
+                }
+                futures::future::ready(())
+            })));
+        });
     }
 }
