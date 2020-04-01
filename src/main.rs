@@ -7,7 +7,6 @@ mod schema;
 mod services;
 
 // TODO: remove this when diesel is updated for rust 2018:
-// https://github.com/diesel-rs/diesel/pull/1956
 #[macro_use]
 extern crate diesel;
 

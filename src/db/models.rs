@@ -63,7 +63,7 @@ impl NewDiskUsage {
 pub struct Tweet {
     pub id: i32,
     pub twitter_tweet_id: String,
-    pub group_name: String,
+    pub group_name: Vec<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub favorite_count: i32,
@@ -84,7 +84,7 @@ impl Into<String> for Tweet {
 #[table_name = "tweets"]
 pub struct NewTweet {
     pub twitter_tweet_id: String,
-    pub group_name: String,
+    pub group_name: Vec<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub favorite_count: i32,
@@ -99,7 +99,7 @@ impl NewTweet {
     pub fn from_egg_mode_tweet(group_name: String, egg_mode_tweet: EggModeTweet) -> Self {
         Self {
             twitter_tweet_id: egg_mode_tweet.id.to_string(),
-            group_name,
+            group_name: vec![group_name],
             latitude: egg_mode_tweet.coordinates.map(|c| c.0),
             longitude: egg_mode_tweet.coordinates.map(|c| c.1),
             favorite_count: egg_mode_tweet.favorite_count,

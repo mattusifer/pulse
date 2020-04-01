@@ -1,0 +1,2 @@
+ALTER TABLE tweets
+ALTER COLUMN group_name TYPE VARCHAR USING COALESCE(group_name[0], '');

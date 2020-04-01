@@ -19,7 +19,7 @@ table! {
     tweets (id) {
         id -> Int4,
         twitter_tweet_id -> Varchar,
-        group_name -> Varchar,
+        group_name -> Array<Text>,
         latitude -> Nullable<Float8>,
         longitude -> Nullable<Float8>,
         favorite_count -> Int4,
