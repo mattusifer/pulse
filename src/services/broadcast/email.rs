@@ -31,7 +31,7 @@ pub fn send_email(config: &EmailConfig, subject: String, body: String) -> Result
 
     // Send the email
     mailer.send(email.into()).map(|_| ()).map_err(|e| {
-        eprintln!("Error sending email: {:?}", e);
+        log::error!("Error sending email: {:?}", e);
         Into::into(e)
     })
 }

@@ -57,7 +57,7 @@ impl Scheduler {
         serde_json::to_string(&task.message)
             .map_err(Into::into)
             .and_then(|t| self.ports.insert_task(models::NewTask::new(t)))
-            .unwrap_or_else(|e| eprintln!("{}", Into::<Error>::into(e)));
+            .unwrap_or_else(|e| log::error!("{}", Into::<Error>::into(e)));
 
         // send this message to configured task_runners
         for runner in &self.task_runners {
