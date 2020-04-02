@@ -1,7 +1,8 @@
 mod messages;
 pub use messages::*;
 
-use actix::prelude::*;
+use actix::{fut::wrap_future, Actor, AsyncContext, Context, Recipient};
+use futures::FutureExt;
 
 use crate::{
     config::{config, ScheduledTaskConfig},
@@ -60,9 +61,13 @@ impl Scheduler {
 
         // send this message to configured task_runners
         for runner in &self.task_runners {
-            runner
-                .do_send(task.clone().message)
-                .unwrap_or_else(|e| eprintln!("{}", Into::<Error>::into(e)))
+            let task = task.clone();
+            ctx.spawn(wrap_future(runner.send(task.clone().message).map(
+                move |response| match response.unwrap() {
+                    Err(e) => log::error!("Error sending message {:?}: {:?}", task.message, e),
+                    Ok(_) => (),
+                },
+            )));
         }
 
         // schedule the next run of this task based on its cron schedule
@@ -92,6 +97,7 @@ impl Actor for Scheduler {
 #[cfg(test)]
 mod test {
     use super::*;
+    use actix::*;
     use std::{
         sync::{Arc, Mutex},
         thread, time,

@@ -18,12 +18,12 @@ diesel = { version = "^1.4", features = ["chrono", "postgres"] }
 dirs = "^1.0"
 egg-mode = "^0.13"
 failure = "^0.1"
-futures = "^0.1"
+futures = "^0.3"
 lazy_static = "^1.3"
 lettre = "^0.9"
 lettre_email = "^0.9"
 log = "^0.4"
-nytrs = { git = "https://github.com/mattusifer/nytrs.git", tag = "0.1.0" }
+nytrs = { git = "https://github.com/mattusifer/nytrs.git", tag = "0.1.1" }
 # nytrs = { path = "../nytrs" }
 mime = "^0.3"
 pagecache = "^0.12"

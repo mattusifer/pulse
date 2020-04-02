@@ -1655,8 +1655,8 @@ dependencies = [
 
 [[package]]
 name = "nytrs"
-version = "0.1.0"
-source = "git+https://github.com/mattusifer/nytrs.git?tag=0.1.0#772a9463d5ba08b1ad5d3be3b4ec6340a53f770c"
+version = "0.1.1"
+source = "git+https://github.com/mattusifer/nytrs.git?tag=0.1.1#dced8f6414b3b3d124afcd9918a3793e17957fc5"
 dependencies = [
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.9.12 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1893,13 +1893,13 @@ dependencies = [
  "dirs 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "egg-mode 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures 0.1.27 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lettre 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lettre_email 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "mime 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
- "nytrs 0.1.0 (git+https://github.com/mattusifer/nytrs.git?tag=0.1.0)",
+ "nytrs 0.1.1 (git+https://github.com/mattusifer/nytrs.git?tag=0.1.1)",
  "pagecache 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pretty_env_logger 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3168,7 +3168,7 @@ dependencies = [
 "checksum num-integer 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)" = "e83d528d2677f0518c570baf2b7abdcf0cd2d248860b68507bdcb3e91d4c0cea"
 "checksum num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "0b3a5d7cc97d6d30d8b9bc8fa19bf45349ffe46241e8816f50f62f6d6aaabee1"
 "checksum num_cpus 1.12.0 (registry+https://github.com/rust-lang/crates.io-index)" = "46203554f085ff89c235cd12f7075f3233af9b11ed7c9e16dfe2560d03313ce6"
-"checksum nytrs 0.1.0 (git+https://github.com/mattusifer/nytrs.git?tag=0.1.0)" = "<none>"
+"checksum nytrs 0.1.1 (git+https://github.com/mattusifer/nytrs.git?tag=0.1.1)" = "<none>"
 "checksum opaque-debug 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "93f5bb2e8e8dec81642920ccff6b61f1eb94fa3020c5a325c9851ff604152409"
 "checksum openssl 0.10.19 (registry+https://github.com/rust-lang/crates.io-index)" = "84321fb9004c3bce5611188a644d6171f895fa2889d155927d528782edb21c5d"
 "checksum openssl-probe 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"

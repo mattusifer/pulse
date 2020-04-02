@@ -3,13 +3,12 @@ use std::sync::Arc;
 
 use actix::{Actor, Context};
 use chrono::NaiveDateTime;
-use egg_mode::{stream::StreamMessage, KeyPair, Token};
-use futures::stream::Stream;
+use egg_mode::{stream::TwitterStream, KeyPair, Token};
 
 use crate::{
     config::{config, TwitterConfig},
     db::{database, models},
-    error::{future::PulseStream, Error, Result},
+    error::Result,
     services::broadcast::{BroadcastEvent, OUTBOX},
 };
 
@@ -66,23 +65,14 @@ impl Twitter {
         }
     }
 
-    pub fn filter_streams(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            String,
-            Box<dyn Stream<Item = StreamMessage, Error = Error> + Send>,
-        ),
-    > + '_ {
+    pub fn filter_streams(&self) -> impl Iterator<Item = (String, TwitterStream)> + '_ {
         self.config.terms.iter().map(move |terms| {
             (
                 terms.group_name.clone(),
                 egg_mode::stream::filter()
                     .track(&terms.terms)
                     .language(&["en"])
-                    .start(&self.get_token())
-                    .map_err(Into::into)
-                    .into_box(),
+                    .start(&self.get_token()),
             )
         })
     }
