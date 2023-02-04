@@ -35,4 +35,4 @@ systemstat = "^0.1"
 toml = "^0.4"
 
 [dev-dependencies]
-tokio = { version = "^0.2", features = ["time"] }
+tokio = { version = "^1.18", features = ["time"] }
